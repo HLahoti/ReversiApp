@@ -6,7 +6,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -19,10 +18,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -185,15 +184,9 @@ private fun TopBar(
             IconButton(onClick = onPause) {
                 Icon(Icons.Default.Pause, contentDescription = "Pause", tint = Felt.OnDark)
             }
-            Button(
-                onClick = onReset,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = AppConfig.Palette.Glass,
-                    contentColor = Felt.OnDark,
-                ),
-                shape = RoundedCornerShape(999.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-            ) { Text("Reset", fontSize = 13.sp) }
+            IconButton(onClick = onReset) {
+                Icon(Icons.Default.Refresh, contentDescription = "Reset", tint = Felt.OnDark)
+            }
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.example.othello.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,17 +20,25 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.othello.R
 import com.example.othello.config.AppConfig
+import kotlinx.coroutines.delay
 
 @Composable
 fun HomeScreen(
@@ -36,6 +46,7 @@ fun HomeScreen(
     onStartVsBot: (humanColor: HumanColorChoice) -> Unit,
 ) {
     val haptics = rememberHaptics()
+    var choice by remember { mutableStateOf(HumanColorChoice.RANDOM) }
     BackdropBackground {
         Column(
             Modifier
@@ -45,17 +56,13 @@ fun HomeScreen(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            SpinningPiece(target = choice, size = 140.dp)
+            Spacer(Modifier.height(12.dp))
             Text(
                 text = "Othello",
                 color = Felt.OnDark,
                 fontSize = 56.sp,
                 fontWeight = FontWeight.Light,
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = "A neural engine lives inside.",
-                color = Felt.OnDarkDim,
-                fontSize = 14.sp,
             )
             Spacer(Modifier.height(44.dp))
 
@@ -74,7 +81,6 @@ fun HomeScreen(
             Spacer(Modifier.height(20.dp))
 
             GlassPanel(Modifier.fillMaxWidth()) {
-                var choice by remember { mutableStateOf(HumanColorChoice.RANDOM) }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Play against the bot", color = Felt.OnDark, fontSize = 18.sp)
                     Spacer(Modifier.height(12.dp))
@@ -98,6 +104,62 @@ fun HomeScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SpinningPiece(target: HumanColorChoice, size: Dp) {
+    val anim = AppConfig.Animation
+    val liveTarget by rememberUpdatedState(target)
+    var blackUp by remember { mutableStateOf(true) }
+    var frame by remember { mutableIntStateOf(0) }
+    var flipping by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            val needFlip = when (liveTarget) {
+                HumanColorChoice.BLACK -> !blackUp
+                HumanColorChoice.WHITE -> blackUp
+                HumanColorChoice.RANDOM -> true
+            }
+            if (needFlip) {
+                flipping = true
+                for (i in 1..anim.FLIP_FRAME_COUNT) {
+                    frame = i
+                    delay(anim.FLIP_FRAME_MS)
+                }
+                blackUp = !blackUp
+                flipping = false
+                frame = 0
+            } else {
+                delay(50)
+            }
+        }
+    }
+
+    val ctx = LocalContext.current
+    if (flipping && frame > 0) {
+        val prefix = if (blackUp) "flip_b2w" else "flip_w2b"
+        val resId = remember(prefix, frame) {
+            ctx.resources.getIdentifier(
+                "${prefix}_${"%02d".format(frame)}", "drawable", ctx.packageName,
+            )
+        }
+        if (resId != 0) {
+            Image(
+                painter = painterResource(resId),
+                contentDescription = null,
+                modifier = Modifier.size(size),
+            )
+        }
+    } else {
+        Image(
+            painter = painterResource(
+                if (blackUp) R.drawable.piece_black else R.drawable.piece_white,
+            ),
+            contentDescription = null,
+            modifier = Modifier.size(size),
+        )
     }
 }
 
