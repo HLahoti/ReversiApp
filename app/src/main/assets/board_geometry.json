@@ -1,0 +1,9 @@
+{
+  "board_width_px": 1058,
+  "board_height_px": 1057,
+  "cell_px": 132.25,
+  "piece_width_px": 101,
+  "piece_height_px": 102,
+  "piece_to_cell_ratio": 0.7637051039697542,
+  "flip_frame_count": 20
+}
