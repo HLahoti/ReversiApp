@@ -105,6 +105,19 @@ object AppConfig {
     object Haptics {
         /** Master switch for all haptic feedback. */
         const val ENABLED: Boolean = true
+
+        /** Strength of a `tap()` buzz (chip selects, back/pause taps, illegal moves). 0f–1f. */
+        const val TAP_INTENSITY: Float = 1.0f
+
+        /** Strength of each click in a `confirm()` double-pulse (legal moves, start, reset). 0f–1f. */
+        const val CONFIRM_INTENSITY: Float = 1.0f
+
+        /** Fallback one-shot duration + amplitude for the tap on Android 8–10. */
+        const val FALLBACK_TAP_MS: Long = 14L
+
+        /** Fallback one-shot for the confirm on Android 8–10 (and pre-O without amplitude). */
+        const val FALLBACK_CONFIRM_MS: Long = 30L
+        const val FALLBACK_CONFIRM_AMPLITUDE: Int = 180
     }
 
     // ─────────────────────────────────────────────────────────────────────
