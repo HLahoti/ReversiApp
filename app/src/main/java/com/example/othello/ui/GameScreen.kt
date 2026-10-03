@@ -28,11 +28,16 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -56,6 +61,23 @@ fun GameScreen(
     val players by vm.players.collectAsState()
     val haptics = rememberHaptics()
     var paused by remember { mutableStateOf(false) }
+
+    // Save on app pause / background and again when the screen is torn down
+    // (back arrow, system back, or navigating away). persist() internally
+    // clears the save if there's nothing worth resuming (fresh board or a
+    // finished game).
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val currentVm by rememberUpdatedState(vm)
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE) currentVm.persist()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            currentVm.persist()
+        }
+    }
 
     Box(Modifier.fillMaxSize()) {
         val contentModifier =

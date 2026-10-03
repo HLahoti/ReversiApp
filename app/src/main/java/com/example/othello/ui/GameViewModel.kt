@@ -5,6 +5,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.othello.bot.Bot
 import com.example.othello.config.AppConfig
+import com.example.othello.data.GameStore
+import com.example.othello.data.SavedGame
+import com.example.othello.data.SavedMode
+import com.example.othello.data.SavedMove
 import com.example.othello.game.GameState
 import com.example.othello.game.Move
 import com.example.othello.game.Player
@@ -38,6 +42,8 @@ data class FlipAnimations(
 
 class GameViewModel(app: Application) : AndroidViewModel(app) {
 
+    private val store = GameStore(app)
+
     private val _state = MutableStateFlow(GameState())
     val state: StateFlow<GameState> = _state.asStateFlow()
 
@@ -57,18 +63,66 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private var botJob: Job? = null
     private var bot: Bot? = null
 
+    /** Every ply that has been applied, in order. Replayed on resume, written on persist. */
+    private val moves = mutableListOf<Move>()
+
+    /** Set once configure/resume has run, so persist() knows which file to write. */
+    private var mode: SavedMode? = null
+
     fun configure(players: Players) {
         _players.value = players
-        resetGame()
+        mode = modeFor(players)
+        resetInternal()
+        mode?.let(store::clear)
+        maybeRunBot()
+    }
+
+    /**
+     * Replay [saved] into the state. The caller is responsible for picking
+     * `players` consistent with the save (two-human for a two-player save,
+     * one-bot with [SavedGame.humanColor] as the human for a vs-bot save).
+     */
+    fun resume(saved: SavedGame, players: Players) {
+        _players.value = players
+        mode = modeFor(players)
+        resetInternal()
+        var s = GameState()
+        for (m in saved.moves) {
+            val mv = if (m.isPass) Move.PASS else Move(m.x, m.y)
+            val next = s.play(mv) ?: break
+            s = next
+            moves.add(mv)
+        }
+        _state.value = s
+        maybeRunBot()
     }
 
     fun resetGame() {
         botJob?.cancel()
-        _state.value = GameState()
-        _flips.value = FlipAnimations()
-        _botThinking.value = false
-        _animating.value = false
+        resetInternal()
+        mode?.let(store::clear)
         maybeRunBot()
+    }
+
+    /**
+     * Call on back / app pause. Writes the current unfinished game to the
+     * matching save slot, or clears it if there is nothing worth resuming
+     * (no moves yet, or the game is already over).
+     */
+    fun persist() {
+        val m = mode ?: return
+        if (moves.isEmpty() || _state.value.isTerminal) {
+            store.clear(m)
+            return
+        }
+        val saved = moves.map { SavedMove(it.x, it.y, it.isPass) }
+        when (m) {
+            SavedMode.TWO_PLAYER -> store.writeTwoPlayer(saved)
+            SavedMode.VS_BOT -> {
+                val human = humanColorIn(_players.value) ?: return
+                store.writeVsBot(saved, human)
+            }
+        }
     }
 
     fun onTapCell(x: Int, y: Int) {
@@ -84,21 +138,30 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     fun passTurn() {
         val cur = _state.value
         if (cur.legalMoves.isNotEmpty()) return
-        _state.value = cur.play(Move.PASS) ?: return
+        val next = cur.play(Move.PASS) ?: return
+        moves.add(Move.PASS)
+        _state.value = next
         maybeRunBot()
+    }
+
+    private fun resetInternal() {
+        botJob?.cancel()
+        _state.value = GameState()
+        _flips.value = FlipAnimations()
+        _botThinking.value = false
+        _animating.value = false
+        moves.clear()
     }
 
     private fun applyMove(move: Move) {
         val cur = _state.value
         val next = cur.play(move) ?: return
         _state.value = next
+        moves.add(move)
         val anim = AppConfig.Animation
         var totalMs = 0L
         if (next.lastFlips.isNotEmpty()) {
             val now = System.currentTimeMillis()
-            // Flips always lie on rays from the move, so Chebyshev distance
-            // = step count along the ray (1 = adjacent). Adjacent cells start
-            // immediately; farther cells wait their turn.
             var maxDelay = 0L
             val entries = next.lastFlips.map { (fx, fy) ->
                 val dist = max(abs(fx - move.x), abs(fy - move.y))
@@ -128,7 +191,6 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 maybeRunBot()
             }
         } else {
-            // No flips to wait on (e.g. a pass or an edge case) — advance now.
             maybeRunBot()
         }
     }
@@ -139,7 +201,9 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         if (cur.legalMoves.isEmpty()) {
             viewModelScope.launch {
                 delay(AppConfig.Bot.AUTO_PASS_DELAY_MS)
-                _state.value = cur.play(Move.PASS) ?: return@launch
+                val next = cur.play(Move.PASS) ?: return@launch
+                moves.add(Move.PASS)
+                _state.value = next
                 maybeRunBot()
             }
             return
@@ -155,5 +219,17 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             delay(AppConfig.Bot.THINKING_MIN_MS)
             applyMove(chosen)
         }
+    }
+
+    private fun modeFor(p: Players): SavedMode? = when {
+        p.black == Participant.HUMAN && p.white == Participant.HUMAN -> SavedMode.TWO_PLAYER
+        p.black == Participant.BOT || p.white == Participant.BOT -> SavedMode.VS_BOT
+        else -> null
+    }
+
+    private fun humanColorIn(p: Players): Player? = when {
+        p.black == Participant.HUMAN && p.white == Participant.BOT -> Player.BLACK
+        p.white == Participant.HUMAN && p.black == Participant.BOT -> Player.WHITE
+        else -> null
     }
 }

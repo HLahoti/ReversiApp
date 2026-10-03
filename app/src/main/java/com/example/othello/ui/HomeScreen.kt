@@ -15,11 +15,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -31,22 +34,49 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.example.othello.R
 import com.example.othello.config.AppConfig
+import com.example.othello.data.GameStore
+import com.example.othello.data.SavedMode
 import kotlinx.coroutines.delay
 
 @Composable
 fun HomeScreen(
-    onStartTwoPlayer: () -> Unit,
-    onStartVsBot: (humanColor: HumanColorChoice) -> Unit,
+    onStartTwoPlayer: (resume: Boolean) -> Unit,
+    onStartVsBot: (humanColor: HumanColorChoice, resume: Boolean) -> Unit,
 ) {
     val haptics = rememberHaptics()
+    val ctx = LocalContext.current
+    val store = remember(ctx) { GameStore(ctx.applicationContext) }
     var choice by remember { mutableStateOf(HumanColorChoice.RANDOM) }
+
+    // Re-check save existence whenever this screen comes to the foreground
+    // (back from a game, app resume) so Resume/New buttons stay in sync.
+    var hasTwoPlayer by remember { mutableStateOf(store.has(SavedMode.TWO_PLAYER)) }
+    var hasVsBot by remember { mutableStateOf(store.has(SavedMode.VS_BOT)) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasTwoPlayer = store.has(SavedMode.TWO_PLAYER)
+                hasVsBot = store.has(SavedMode.VS_BOT)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
+
+    // Which mode's "New game" has a confirm dialog pending.
+    var confirmDiscard by remember { mutableStateOf<SavedMode?>(null) }
+
     BackdropBackground {
         Column(
             Modifier
@@ -70,11 +100,25 @@ fun HomeScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Pass & play", color = Felt.OnDark, fontSize = 18.sp)
                     Spacer(Modifier.height(10.dp))
-                    PrimaryButton(
-                        text = "Start 2-player game",
-                        onClick = { haptics.confirm(); onStartTwoPlayer() },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    if (hasTwoPlayer) {
+                        PrimaryButton(
+                            text = "Resume game",
+                            onClick = { haptics.confirm(); onStartTwoPlayer(true) },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        SecondaryButton(
+                            text = "New game",
+                            onClick = { haptics.tap(); confirmDiscard = SavedMode.TWO_PLAYER },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    } else {
+                        PrimaryButton(
+                            text = "Start 2-player game",
+                            onClick = { haptics.confirm(); onStartTwoPlayer(false) },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                 }
             }
 
@@ -96,14 +140,58 @@ fun HomeScreen(
                         }
                     }
                     Spacer(Modifier.height(14.dp))
-                    PrimaryButton(
-                        text = "Start",
-                        onClick = { haptics.confirm(); onStartVsBot(choice) },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    if (hasVsBot) {
+                        PrimaryButton(
+                            text = "Resume game",
+                            onClick = { haptics.confirm(); onStartVsBot(choice, true) },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        SecondaryButton(
+                            text = "New game",
+                            onClick = { haptics.tap(); confirmDiscard = SavedMode.VS_BOT },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    } else {
+                        PrimaryButton(
+                            text = "Start",
+                            onClick = { haptics.confirm(); onStartVsBot(choice, false) },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                 }
             }
         }
+    }
+
+    confirmDiscard?.let { mode ->
+        AlertDialog(
+            onDismissRequest = { confirmDiscard = null },
+            title = { Text("Discard saved game?") },
+            text = {
+                Text(
+                    when (mode) {
+                        SavedMode.TWO_PLAYER ->
+                            "Your paused 2-player game will be discarded. This can't be undone."
+                        SavedMode.VS_BOT ->
+                            "Your paused game against the bot will be discarded. This can't be undone."
+                    }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    haptics.confirm()
+                    confirmDiscard = null
+                    when (mode) {
+                        SavedMode.TWO_PLAYER -> onStartTwoPlayer(false)
+                        SavedMode.VS_BOT -> onStartVsBot(choice, false)
+                    }
+                }) { Text("Discard & start") }
+            },
+            dismissButton = {
+                TextButton(onClick = { haptics.tap(); confirmDiscard = null }) { Text("Cancel") }
+            },
+        )
     }
 }
 
@@ -182,6 +270,21 @@ private fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier 
         ),
     ) {
         Text(text, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun SecondaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.height(44.dp),
+        shape = RoundedCornerShape(14.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = AppConfig.Palette.Glass,
+            contentColor = Felt.OnDark,
+        ),
+    ) {
+        Text(text, fontSize = 15.sp, fontWeight = FontWeight.Normal)
     }
 }
 
