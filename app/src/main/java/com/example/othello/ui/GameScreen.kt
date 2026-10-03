@@ -1,6 +1,8 @@
 package com.example.othello.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -9,15 +11,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Pause
@@ -41,6 +42,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -105,8 +108,6 @@ fun GameScreen(
                         white = state.whiteCount,
                         toMove = state.toMove,
                         thinking = thinking,
-                        blackIsBot = players.of(Player.BLACK) == Participant.BOT,
-                        whiteIsBot = players.of(Player.WHITE) == Participant.BOT,
                     )
 
                     Spacer(Modifier.height(16.dp))
@@ -233,58 +234,62 @@ private fun ScoreBar(
     white: Int,
     toMove: Player,
     thinking: Boolean,
-    blackIsBot: Boolean,
-    whiteIsBot: Boolean,
 ) {
-    GlassPanel(Modifier.fillMaxWidth()) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            PlayerBadge("Black", black, color = AppConfig.Palette.BlackBadge,
-                active = toMove == Player.BLACK, isBot = blackIsBot, thinking = thinking)
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = when {
-                        thinking -> "Thinking…"
-                        else -> if (toMove == Player.BLACK) "Black to move" else "White to move"
-                    },
-                    color = Felt.OnDarkDim, fontSize = 13.sp,
-                )
-            }
-            PlayerBadge("White", white, color = AppConfig.Palette.WhiteBadge,
-                active = toMove == Player.WHITE, isBot = whiteIsBot, thinking = thinking)
-        }
-    }
-}
-
-@Composable
-private fun PlayerBadge(
-    label: String,
-    score: Int,
-    color: Color,
-    active: Boolean,
-    isBot: Boolean,
-    thinking: Boolean,
-) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    val shape = RoundedCornerShape(24.dp)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .clip(shape)
+            .border(BorderStroke(1.dp, Felt.GlassBorder), shape),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Box(
             Modifier
-                .size(28.dp)
-                .background(color = color, shape = CircleShape)
-                .padding(2.dp)
-        )
-        Spacer(Modifier.width(10.dp))
-        Column {
+                .weight(1f)
+                .fillMaxHeight()
+                .background(AppConfig.Palette.BlackBadge),
+            contentAlignment = Alignment.Center,
+        ) {
             Text(
-                "$label${if (isBot) " · bot" else ""}",
-                color = if (active) Felt.Highlight else Felt.OnDarkDim,
-                fontSize = 12.sp,
-            )
-            Text(
-                "$score",
+                "$black",
                 color = Felt.OnDark,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .background(
+                    Brush.verticalGradient(
+                        0.0f to Felt.GlassTop,
+                        1.0f to Felt.GlassBottom,
+                    )
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = when {
+                    thinking -> "Thinking…"
+                    toMove == Player.BLACK -> "Black to move"
+                    else -> "White to move"
+                },
+                color = Felt.OnDark,
+                fontSize = 14.sp,
+            )
+        }
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .background(AppConfig.Palette.WhiteBadge),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                "$white",
+                color = Felt.Deep,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.SemiBold,
             )
