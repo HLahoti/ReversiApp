@@ -43,6 +43,7 @@ fun BoardView(
     state: GameState,
     flips: FlipAnimations,
     showHints: Boolean,
+    openingFrame: Int?,
     onTap: (Int, Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -77,6 +78,7 @@ fun BoardView(
                     state = state,
                     flips = flips,
                     showHints = showHints,
+                    openingFrame = openingFrame,
                     onTap = onTap,
                     boardDp = boardDp,
                     cellDp = cellDp,
@@ -93,6 +95,7 @@ private fun Board(
     state: GameState,
     flips: FlipAnimations,
     showHints: Boolean,
+    openingFrame: Int?,
     onTap: (Int, Int) -> Unit,
     boardDp: Dp,
     cellDp: Dp,
@@ -105,6 +108,11 @@ private fun Board(
         Modifier.size(boardDp),
         contentAlignment = Alignment.TopStart,
     ) {
+            if (openingFrame != null) {
+                OpeningFrame(frame = openingFrame, sizeDp = boardDp)
+                return@Box
+            }
+
             Image(
                 painter = painterResource(id = R.drawable.board),
                 contentDescription = null,
@@ -230,6 +238,26 @@ private fun LastMoveRing(sizeDp: Dp) {
         drawCircle(
             color = AppConfig.Palette.Highlight.copy(alpha = cfg.LAST_MOVE_RING_ALPHA),
             style = Stroke(width = cfg.LAST_MOVE_RING_STROKE_PX),
+        )
+    }
+}
+
+@Composable
+private fun OpeningFrame(frame: Int, sizeDp: Dp) {
+    val ctx = LocalContext.current
+    val resId = remember(frame) {
+        ctx.resources.getIdentifier(
+            "game_start_${"%03d".format(frame)}",
+            "drawable",
+            ctx.packageName,
+        )
+    }
+    if (resId != 0) {
+        Image(
+            painter = painterResource(id = resId),
+            contentDescription = null,
+            modifier = Modifier.size(sizeDp),
+            contentScale = ContentScale.FillBounds,
         )
     }
 }

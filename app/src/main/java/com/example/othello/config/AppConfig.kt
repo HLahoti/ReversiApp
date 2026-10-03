@@ -73,6 +73,17 @@ object AppConfig {
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // Game-start intro animation
+    // ─────────────────────────────────────────────────────────────────────
+    object OpeningAnimation {
+        /** Bundled frames of the game-start intro, named `game_start_001..NNN`. */
+        const val FRAME_COUNT: Int = 200
+
+        /** Per-frame display time, in ms. 20 ms × 200 = 4.0 s total. */
+        const val FRAME_MS: Long = 20L
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // Board layout + overlay look
     // ─────────────────────────────────────────────────────────────────────
     object Board {

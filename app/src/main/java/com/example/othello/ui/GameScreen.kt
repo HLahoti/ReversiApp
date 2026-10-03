@@ -64,6 +64,7 @@ fun GameScreen(
     val players by vm.players.collectAsState()
     val log by vm.log.collectAsState()
     val viewingIndex by vm.viewingIndex.collectAsState()
+    val openingFrame by vm.openingFrame.collectAsState()
     val haptics = rememberHaptics()
     var paused by remember { mutableStateOf(false) }
 
@@ -116,6 +117,7 @@ fun GameScreen(
                         flips = flips,
                         showHints = !thinking && !animating &&
                             players.of(state.toMove) == Participant.HUMAN,
+                        openingFrame = openingFrame,
                         onTap = { x, y ->
                             val mv = com.example.othello.game.Move(x, y)
                             val accepted = !animating && !thinking &&

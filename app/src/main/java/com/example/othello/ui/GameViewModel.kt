@@ -75,7 +75,12 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private val _viewingIndex = MutableStateFlow(-1)
     val viewingIndex: StateFlow<Int> = _viewingIndex.asStateFlow()
 
+    /** Current frame of the game-start intro, 1..FRAME_COUNT, or null when not playing. */
+    private val _openingFrame = MutableStateFlow<Int?>(null)
+    val openingFrame: StateFlow<Int?> = _openingFrame.asStateFlow()
+
     private var botJob: Job? = null
+    private var openingJob: Job? = null
     private var bot: Bot? = null
 
     /** Every ply that has been applied, in order. Replayed on resume, written on persist. */
@@ -89,7 +94,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         mode = modeFor(players)
         resetInternal()
         mode?.let(store::clear)
-        maybeRunBot()
+        playOpening()
     }
 
     /**
@@ -141,7 +146,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         botJob?.cancel()
         resetInternal()
         mode?.let(store::clear)
-        maybeRunBot()
+        playOpening()
     }
 
     /**
@@ -189,6 +194,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun resetInternal() {
         botJob?.cancel()
+        openingJob?.cancel()
+        _openingFrame.value = null
         _state.value = GameState()
         _flips.value = FlipAnimations()
         _botThinking.value = false
@@ -196,6 +203,27 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         moves.clear()
         _log.value = emptyList()
         _viewingIndex.value = -1
+    }
+
+    /**
+     * Play the game-start intro frames, then hand off to normal play.
+     * The opening animation reuses [_animating] to gate taps and the bot
+     * until the board has settled into its starting position.
+     */
+    private fun playOpening() {
+        openingJob?.cancel()
+        val cfg = AppConfig.OpeningAnimation
+        _animating.value = true
+        _openingFrame.value = 1
+        openingJob = viewModelScope.launch {
+            for (i in 1..cfg.FRAME_COUNT) {
+                _openingFrame.value = i
+                delay(cfg.FRAME_MS)
+            }
+            _openingFrame.value = null
+            _animating.value = false
+            maybeRunBot()
+        }
     }
 
     /** If the player is viewing a historical state, drop every ply after it. */
