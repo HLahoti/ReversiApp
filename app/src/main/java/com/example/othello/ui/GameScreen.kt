@@ -52,6 +52,7 @@ fun GameScreen(
     val state by vm.state.collectAsState()
     val flips by vm.flips.collectAsState()
     val thinking by vm.botThinking.collectAsState()
+    val animating by vm.animating.collectAsState()
     val players by vm.players.collectAsState()
     val haptics = rememberHaptics()
     var paused by remember { mutableStateOf(false) }
@@ -88,11 +89,13 @@ fun GameScreen(
                     BoardView(
                         state = state,
                         flips = flips,
-                        showHints = !thinking && players.of(state.toMove) == Participant.HUMAN,
+                        showHints = !thinking && !animating &&
+                            players.of(state.toMove) == Participant.HUMAN,
                         onTap = { x, y ->
                             val mv = com.example.othello.game.Move(x, y)
-                            if (state.board.isLegal(mv, state.toMove)) haptics.confirm()
-                            else haptics.tap()
+                            val accepted = !animating && !thinking &&
+                                state.board.isLegal(mv, state.toMove)
+                            if (accepted) haptics.confirm() else haptics.tap()
                             vm.onTapCell(x, y)
                         },
                     )

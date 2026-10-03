@@ -56,7 +56,7 @@ fun HomeScreen(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            SpinningPiece(target = choice, size = 140.dp)
+            SpinningPiece(target = choice, size = 160.dp)
             Spacer(Modifier.height(12.dp))
             Text(
                 text = "Othello",
@@ -124,7 +124,11 @@ private fun SpinningPiece(target: HumanColorChoice, size: Dp) {
             }
             if (needFlip) {
                 flipping = true
-                for (i in 1..anim.FLIP_FRAME_COUNT) {
+                // Skip the opening frame (= fully-settled source colour): the
+                // previous flip ended on that exact pose (last frame of the
+                // b2w set == first frame of the w2b set, and vice versa), so
+                // playing it again reads as the piece pausing mid-spin.
+                for (i in 2..anim.FLIP_FRAME_COUNT) {
                     frame = i
                     delay(anim.FLIP_FRAME_MS)
                 }
@@ -141,8 +145,9 @@ private fun SpinningPiece(target: HumanColorChoice, size: Dp) {
     if (flipping && frame > 0) {
         val prefix = if (blackUp) "flip_b2w" else "flip_w2b"
         val resId = remember(prefix, frame) {
+            val src = sourceFrameFor(frame, anim.FLIP_FRAME_COUNT, anim.FLIP_SOURCE_FRAME_COUNT)
             ctx.resources.getIdentifier(
-                "${prefix}_${"%02d".format(frame)}", "drawable", ctx.packageName,
+                "${prefix}_${"%03d".format(src)}", "drawable", ctx.packageName,
             )
         }
         if (resId != 0) {

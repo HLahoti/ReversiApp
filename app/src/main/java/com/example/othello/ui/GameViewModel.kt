@@ -8,6 +8,8 @@ import com.example.othello.config.AppConfig
 import com.example.othello.game.GameState
 import com.example.othello.game.Move
 import com.example.othello.game.Player
+import kotlin.math.abs
+import kotlin.math.max
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -25,9 +27,12 @@ data class Players(val black: Participant, val white: Participant) {
     fun of(p: Player) = if (p == Player.BLACK) black else white
 }
 
+/** A single scheduled flip: when it was queued, and how long it waits first. */
+data class FlipRun(val startMs: Long, val delayMs: Long)
+
 data class FlipAnimations(
-    /** key = cell index (0..63); value = ms-start of the current animation */
-    val running: Map<Int, Long> = emptyMap(),
+    /** key = cell index (0..63); value = scheduling info for that cell's flip */
+    val running: Map<Int, FlipRun> = emptyMap(),
     val nowMs: Long = 0L,
 )
 
@@ -45,6 +50,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private val _botThinking = MutableStateFlow(false)
     val botThinking: StateFlow<Boolean> = _botThinking.asStateFlow()
 
+    /** True while a prior move's flip animations are still playing out. */
+    private val _animating = MutableStateFlow(false)
+    val animating: StateFlow<Boolean> = _animating.asStateFlow()
+
     private var botJob: Job? = null
     private var bot: Bot? = null
 
@@ -58,11 +67,13 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         _state.value = GameState()
         _flips.value = FlipAnimations()
         _botThinking.value = false
+        _animating.value = false
         maybeRunBot()
     }
 
     fun onTapCell(x: Int, y: Int) {
         if (_botThinking.value) return
+        if (_animating.value) return
         val cur = _state.value
         if (_players.value.of(cur.toMove) != Participant.HUMAN) return
         val mv = Move(x, y)
@@ -81,24 +92,45 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         val cur = _state.value
         val next = cur.play(move) ?: return
         _state.value = next
+        val anim = AppConfig.Animation
+        var totalMs = 0L
         if (next.lastFlips.isNotEmpty()) {
             val now = System.currentTimeMillis()
+            // Flips always lie on rays from the move, so Chebyshev distance
+            // = step count along the ray (1 = adjacent). Adjacent cells start
+            // immediately; farther cells wait their turn.
+            var maxDelay = 0L
+            val entries = next.lastFlips.map { (fx, fy) ->
+                val dist = max(abs(fx - move.x), abs(fy - move.y))
+                val d = (dist - 1).coerceAtLeast(0) * anim.FLIP_RIPPLE_PER_CELL_MS
+                if (d > maxDelay) maxDelay = d
+                Triple(fx, fy, d)
+            }
+            totalMs = maxDelay +
+                anim.FLIP_FRAME_MS * anim.FLIP_FRAME_COUNT +
+                anim.FLIP_CLEANUP_PAD_MS
             _flips.update { prev ->
                 val running = prev.running.toMutableMap()
-                for ((fx, fy) in next.lastFlips) running[fy * 8 + fx] = now
+                for ((fx, fy, d) in entries) {
+                    running[fy * 8 + fx] = FlipRun(now, d)
+                }
                 prev.copy(running = running, nowMs = now)
             }
+            _animating.value = true
             viewModelScope.launch {
-                val anim = AppConfig.Animation
-                delay(anim.FLIP_FRAME_MS * anim.FLIP_FRAME_COUNT + anim.FLIP_CLEANUP_PAD_MS)
+                delay(totalMs)
                 _flips.update { prev ->
                     val running = prev.running.toMutableMap()
                     for ((fx, fy) in next.lastFlips) running.remove(fy * 8 + fx)
                     prev.copy(running = running)
                 }
+                _animating.value = false
+                maybeRunBot()
             }
+        } else {
+            // No flips to wait on (e.g. a pass or an edge case) — advance now.
+            maybeRunBot()
         }
-        maybeRunBot()
     }
 
     private fun maybeRunBot() {
@@ -115,9 +147,6 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         if (_players.value.of(cur.toMove) != Participant.BOT) return
         _botThinking.value = true
         botJob = viewModelScope.launch {
-            // Give the player a beat to see their move + flip animation before
-            // the bot starts to think. Skipped on the opening ply.
-            if (cur.lastMove != null) delay(AppConfig.Bot.RESPONSE_DELAY_MS)
             val chosen = withContext(Dispatchers.Default) {
                 val b = bot ?: Bot.loadDefault(getApplication()).also { bot = it }
                 b.chooseMove(cur.board, cur.toMove)

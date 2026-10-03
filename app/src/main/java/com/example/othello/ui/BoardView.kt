@@ -98,10 +98,10 @@ fun BoardView(
                         Modifier.size(cellDp).offset(x = xDp, y = yDp),
                         contentAlignment = Alignment.Center,
                     ) {
-                        val flipping = flips.running.containsKey(idx)
-                        if (flipping) {
+                        val run = flips.running[idx]
+                        if (run != null) {
                             val dir = if (cell == Cell.WHITE) FlipDir.B_TO_W else FlipDir.W_TO_B
-                            FlippingPiece(dir, pieceDp)
+                            FlippingPiece(dir, run.delayMs, pieceDp)
                         } else {
                             Image(
                                 painter = painterResource(
@@ -155,15 +155,19 @@ private fun LastMoveRing(sizeDp: Dp) {
 enum class FlipDir { B_TO_W, W_TO_B }
 
 @Composable
-private fun FlippingPiece(dir: FlipDir, sizeDp: Dp) {
+private fun FlippingPiece(dir: FlipDir, startDelayMs: Long, sizeDp: Dp) {
     val anim = AppConfig.Animation
+    // Frame 1 is the pre-flip pose, so holding it during the ripple delay
+    // keeps the cell showing its original colour until its turn comes up.
     var frame by remember { mutableIntStateOf(1) }
-    LaunchedEffect(dir) {
+    LaunchedEffect(dir, startDelayMs) {
+        if (startDelayMs > 0) delay(startDelayMs)
         for (i in 1..anim.FLIP_FRAME_COUNT) { frame = i; delay(anim.FLIP_FRAME_MS) }
     }
     val ctx = LocalContext.current
     val resId = remember(dir, frame) {
-        val n = "flip_${if (dir == FlipDir.B_TO_W) "b2w" else "w2b"}_${"%02d".format(frame)}"
+        val src = sourceFrameFor(frame, anim.FLIP_FRAME_COUNT, anim.FLIP_SOURCE_FRAME_COUNT)
+        val n = "flip_${if (dir == FlipDir.B_TO_W) "b2w" else "w2b"}_${"%03d".format(src)}"
         ctx.resources.getIdentifier(n, "drawable", ctx.packageName)
     }
     if (resId != 0) {
@@ -173,4 +177,11 @@ private fun FlippingPiece(dir: FlipDir, sizeDp: Dp) {
             modifier = Modifier.size(sizeDp),
         )
     }
+}
+
+/** Maps displayed frame index (1..count) to a source frame index (1..source). */
+internal fun sourceFrameFor(displayed: Int, count: Int, source: Int): Int {
+    if (count <= 1) return source
+    if (count >= source) return displayed.coerceIn(1, source)
+    return 1 + ((displayed - 1) * (source - 1)) / (count - 1)
 }

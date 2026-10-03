@@ -34,37 +34,56 @@ object AppConfig {
 
         /** Delay before auto-passing a side with no legal moves, in ms. */
         const val AUTO_PASS_DELAY_MS: Long = 500L
-
-        /**
-         * Delay after an opponent's move before the bot starts to think, in ms.
-         * Gives the player a moment to see their move and watch the flip
-         * animation finish (one flip is ~850 ms). Only applies when there is a
-         * previous move — the bot never pauses before the game's opening ply.
-         * Set to 0 for an instant reply.
-         */
-        const val RESPONSE_DELAY_MS: Long = 800L
     }
 
     // ─────────────────────────────────────────────────────────────────────
     // Animation
     // ─────────────────────────────────────────────────────────────────────
     object Animation {
-        /** Number of pre-rendered flip frames (must match the drawable set). */
-        const val FLIP_FRAME_COUNT: Int = 20
+        /**
+         * Number of pre-rendered flip frames bundled as drawables (fixed —
+         * matches the `flip_{b2w,w2b}_001..NNN.png` set).
+         */
+        const val FLIP_SOURCE_FRAME_COUNT: Int = 100
 
-        /** How long each flip frame is shown, in ms. */
-        const val FLIP_FRAME_MS: Long = 40L
+        /**
+         * How many of the bundled frames to actually play per flip. Must be
+         * between 1 and [FLIP_SOURCE_FRAME_COUNT]; frames are sampled evenly
+         * from the source set. Lower = cheaper to render, choppier look.
+         * (Hook this up to a settings toggle later for a performance mode.)
+         */
+        const val FLIP_FRAME_COUNT: Int = 100
+
+        /** Target total duration of one flip, in ms (ripple delay excluded). */
+        const val FLIP_TOTAL_MS: Long = 800L
+
+        /** Per-frame display time, derived to keep total duration constant. */
+        val FLIP_FRAME_MS: Long = FLIP_TOTAL_MS / FLIP_FRAME_COUNT
 
         /** Extra ms held after the last flip frame before cleanup. */
         const val FLIP_CLEANUP_PAD_MS: Long = 50L
+
+        /**
+         * Per-cell stagger applied to flips based on Chebyshev distance from
+         * the just-played square. Cells adjacent to the move start immediately;
+         * each cell further out waits this many ms longer, producing a ripple
+         * that fans out along the flipped rays.
+         */
+        const val FLIP_RIPPLE_PER_CELL_MS: Long = 70L
     }
 
     // ─────────────────────────────────────────────────────────────────────
     // Board layout + overlay look
     // ─────────────────────────────────────────────────────────────────────
     object Board {
-        /** Piece sprite width ÷ cell width, derived from the Blender renders. */
-        const val PIECE_TO_CELL_RATIO: Float = 101f / (1058f / 8f)
+        /**
+         * Piece sprite width ÷ cell width, derived from the Blender renders.
+         * The 115 is the per-sprite crop region (px) that holds the piece at
+         * its widest flip angle plus 1 px padding; the natural resting-piece
+         * body inside it is 101 px, so the sprite stays visually sized ~0.76
+         * of a cell while the extra margin reserves room for the rotation.
+         */
+        const val PIECE_TO_CELL_RATIO: Float = 115f / (1058f / 8f)
 
         /** Legal-move hint-dot diameter as a fraction of cell width. */
         const val LEGAL_HINT_DIAMETER_RATIO: Float = 0.22f
