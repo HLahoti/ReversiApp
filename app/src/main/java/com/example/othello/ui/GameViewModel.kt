@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.othello.bot.Bot
+import com.example.othello.bot.Difficulty
 import com.example.othello.config.AppConfig
 import com.example.othello.data.GameStore
 import com.example.othello.data.SavedGame
@@ -82,6 +83,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private var botJob: Job? = null
     private var openingJob: Job? = null
     private var bot: Bot? = null
+    private var difficulty: Difficulty? = null
 
     /** Every ply that has been applied, in order. Replayed on resume, written on persist. */
     private val moves = mutableListOf<Move>()
@@ -89,9 +91,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     /** Set once configure/resume has run, so persist() knows which file to write. */
     private var mode: SavedMode? = null
 
-    fun configure(players: Players) {
+    fun configure(players: Players, difficulty: Difficulty? = null) {
         _players.value = players
         mode = modeFor(players)
+        setDifficulty(difficulty)
         resetInternal()
         mode?.let(store::clear)
         playOpening()
@@ -105,6 +108,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     fun resume(saved: SavedGame, players: Players) {
         _players.value = players
         mode = modeFor(players)
+        setDifficulty(saved.difficulty?.let { runCatching { Difficulty.valueOf(it) }.getOrNull() })
         resetInternal()
         var s = GameState()
         val entries = mutableListOf<MoveLogEntry>()
@@ -120,6 +124,13 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         _log.value = entries
         _viewingIndex.value = moves.size - 1
         maybeRunBot()
+    }
+
+    private fun setDifficulty(d: Difficulty?) {
+        if (d != difficulty) {
+            difficulty = d
+            bot = null
+        }
     }
 
     /**
@@ -165,7 +176,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             SavedMode.TWO_PLAYER -> store.writeTwoPlayer(saved)
             SavedMode.VS_BOT -> {
                 val human = humanColorIn(_players.value) ?: return
-                store.writeVsBot(saved, human)
+                store.writeVsBot(saved, human, difficulty)
             }
         }
     }
@@ -304,9 +315,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         }
         if (_players.value.of(cur.toMove) != Participant.BOT) return
         _botThinking.value = true
+        val d = difficulty ?: Difficulty.MEDIUM
         botJob = viewModelScope.launch {
             val chosen = withContext(Dispatchers.Default) {
-                val b = bot ?: Bot.loadDefault(getApplication()).also { bot = it }
+                val b = bot ?: Bot.load(getApplication(), d).also { bot = it }
                 b.chooseMove(cur.board, cur.toMove)
             }
             _botThinking.value = false

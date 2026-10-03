@@ -51,13 +51,10 @@ class Bot(
     companion object {
         private val json = Json { ignoreUnknownKeys = true }
 
-        /** Load the bundled genome from the path in [AppConfig.Bot.GENOME_ASSET_PATH]. */
+        /** Load the bundled genome for [difficulty]. */
         @OptIn(ExperimentalSerializationApi::class)
-        fun loadDefault(
-            ctx: Context,
-            assetPath: String = AppConfig.Bot.GENOME_ASSET_PATH,
-        ): Bot {
-            ctx.assets.open(assetPath).use { stream ->
+        fun load(ctx: Context, difficulty: Difficulty): Bot {
+            ctx.assets.open(difficulty.assetPath).use { stream ->
                 val gf = json.decodeFromStream<GenomeFile>(stream)
                 val n = gf.network
                 val net = NeuralNetwork(

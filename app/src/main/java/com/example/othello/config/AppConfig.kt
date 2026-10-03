@@ -19,9 +19,6 @@ object AppConfig {
     // Bot
     // ─────────────────────────────────────────────────────────────────────
     object Bot {
-        /** Asset path (relative to `assets/`) of the genome JSON to load. */
-        const val GENOME_ASSET_PATH: String = "bot_genome.json"
-
         /**
          * If non-null, overrides the search depth stored in the genome JSON.
          * The default (null) uses whatever depth the genome declares.

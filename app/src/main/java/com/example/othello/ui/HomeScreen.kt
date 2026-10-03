@@ -1,7 +1,9 @@
 package com.example.othello.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,14 +14,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -32,7 +36,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
@@ -43,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.othello.R
+import com.example.othello.bot.Difficulty
 import com.example.othello.config.AppConfig
 import com.example.othello.data.GameStore
 import com.example.othello.data.SavedMode
@@ -51,12 +55,13 @@ import kotlinx.coroutines.delay
 @Composable
 fun HomeScreen(
     onStartTwoPlayer: (resume: Boolean) -> Unit,
-    onStartVsBot: (humanColor: HumanColorChoice, resume: Boolean) -> Unit,
+    onStartVsBot: (humanColor: HumanColorChoice, difficulty: Difficulty, resume: Boolean) -> Unit,
 ) {
     val haptics = rememberHaptics()
     val ctx = LocalContext.current
     val store = remember(ctx) { GameStore(ctx.applicationContext) }
     var choice by remember { mutableStateOf(HumanColorChoice.RANDOM) }
+    var difficulty by remember { mutableStateOf(Difficulty.MEDIUM) }
 
     // Re-check save existence whenever this screen comes to the foreground
     // (back from a game, app resume) so Resume/New buttons stay in sync.
@@ -73,6 +78,12 @@ fun HomeScreen(
         lifecycleOwner.lifecycle.addObserver(obs)
         onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
     }
+
+    // Two-step flow: null = mode picker; set = the picked mode's options panel.
+    var step by remember { mutableStateOf<SavedMode?>(null) }
+    // System back on the options step returns to the picker instead of
+    // exiting the app.
+    BackHandler(enabled = step != null) { step = null }
 
     // Which mode's "New game" has a confirm dialog pending.
     var confirmDiscard by remember { mutableStateOf<SavedMode?>(null) }
@@ -96,10 +107,15 @@ fun HomeScreen(
             )
             Spacer(Modifier.height(44.dp))
 
-            GlassPanel(Modifier.fillMaxWidth()) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Pass & play", color = Felt.OnDark, fontSize = 18.sp)
-                    Spacer(Modifier.height(10.dp))
+            when (step) {
+                null -> ModePicker(
+                    onPickTwoPlayer = { haptics.tap(); step = SavedMode.TWO_PLAYER },
+                    onPickVsBot = { haptics.tap(); step = SavedMode.VS_BOT },
+                )
+                SavedMode.TWO_PLAYER -> OptionsPanel(
+                    title = "Pass & play",
+                    onBack = { haptics.tap(); step = null },
+                ) {
                     if (hasTwoPlayer) {
                         PrimaryButton(
                             text = "Resume game",
@@ -114,20 +130,16 @@ fun HomeScreen(
                         )
                     } else {
                         PrimaryButton(
-                            text = "Start 2-player game",
+                            text = "Start game",
                             onClick = { haptics.confirm(); onStartTwoPlayer(false) },
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
                 }
-            }
-
-            Spacer(Modifier.height(20.dp))
-
-            GlassPanel(Modifier.fillMaxWidth()) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Play against the bot", color = Felt.OnDark, fontSize = 18.sp)
-                    Spacer(Modifier.height(12.dp))
+                SavedMode.VS_BOT -> OptionsPanel(
+                    title = "Play against the bot",
+                    onBack = { haptics.tap(); step = null },
+                ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ColorChip("Black", choice == HumanColorChoice.BLACK) {
                             haptics.tap(); choice = HumanColorChoice.BLACK
@@ -139,11 +151,19 @@ fun HomeScreen(
                             haptics.tap(); choice = HumanColorChoice.RANDOM
                         }
                     }
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Difficulty.values().forEach { d ->
+                            ColorChip(d.label, difficulty == d) {
+                                haptics.tap(); difficulty = d
+                            }
+                        }
+                    }
                     Spacer(Modifier.height(14.dp))
                     if (hasVsBot) {
                         PrimaryButton(
                             text = "Resume game",
-                            onClick = { haptics.confirm(); onStartVsBot(choice, true) },
+                            onClick = { haptics.confirm(); onStartVsBot(choice, difficulty, true) },
                             modifier = Modifier.fillMaxWidth(),
                         )
                         Spacer(Modifier.height(8.dp))
@@ -155,7 +175,7 @@ fun HomeScreen(
                     } else {
                         PrimaryButton(
                             text = "Start",
-                            onClick = { haptics.confirm(); onStartVsBot(choice, false) },
+                            onClick = { haptics.confirm(); onStartVsBot(choice, difficulty, false) },
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
@@ -184,7 +204,7 @@ fun HomeScreen(
                     confirmDiscard = null
                     when (mode) {
                         SavedMode.TWO_PLAYER -> onStartTwoPlayer(false)
-                        SavedMode.VS_BOT -> onStartVsBot(choice, false)
+                        SavedMode.VS_BOT -> onStartVsBot(choice, difficulty, false)
                     }
                 }) { Text("Discard & start") }
             },
@@ -192,6 +212,56 @@ fun HomeScreen(
                 TextButton(onClick = { haptics.tap(); confirmDiscard = null }) { Text("Cancel") }
             },
         )
+    }
+}
+
+@Composable
+private fun ModePicker(
+    onPickTwoPlayer: () -> Unit,
+    onPickVsBot: () -> Unit,
+) {
+    Column(
+        Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        PrimaryButton(
+            text = "Pass & play",
+            onClick = onPickTwoPlayer,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(12.dp))
+        PrimaryButton(
+            text = "Play against the bot",
+            onClick = onPickVsBot,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+private fun OptionsPanel(
+    title: String,
+    onBack: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    GlassPanel(Modifier.fillMaxWidth()) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier.align(Alignment.CenterStart),
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Felt.OnDark,
+                    )
+                }
+                Text(title, color = Felt.OnDark, fontSize = 18.sp)
+            }
+            Spacer(Modifier.height(10.dp))
+            content()
+        }
     }
 }
 
