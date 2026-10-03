@@ -40,6 +40,14 @@ data class FlipAnimations(
     val nowMs: Long = 0L,
 )
 
+/** One row in the move log strip. */
+data class MoveLogEntry(
+    val label: String,
+    val mover: Player,
+    val black: Int,
+    val white: Int,
+)
+
 class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     private val store = GameStore(app)
@@ -59,6 +67,13 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     /** True while a prior move's flip animations are still playing out. */
     private val _animating = MutableStateFlow(false)
     val animating: StateFlow<Boolean> = _animating.asStateFlow()
+
+    private val _log = MutableStateFlow<List<MoveLogEntry>>(emptyList())
+    val log: StateFlow<List<MoveLogEntry>> = _log.asStateFlow()
+
+    /** Which log entry is currently shown on the board (-1 = starting position). */
+    private val _viewingIndex = MutableStateFlow(-1)
+    val viewingIndex: StateFlow<Int> = _viewingIndex.asStateFlow()
 
     private var botJob: Job? = null
     private var bot: Bot? = null
@@ -87,14 +102,39 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         mode = modeFor(players)
         resetInternal()
         var s = GameState()
+        val entries = mutableListOf<MoveLogEntry>()
         for (m in saved.moves) {
+            val mover = s.toMove
             val mv = if (m.isPass) Move.PASS else Move(m.x, m.y)
             val next = s.play(mv) ?: break
-            s = next
             moves.add(mv)
+            entries += MoveLogEntry(labelFor(mv), mover, next.blackCount, next.whiteCount)
+            s = next
         }
         _state.value = s
+        _log.value = entries
+        _viewingIndex.value = moves.size - 1
         maybeRunBot()
+    }
+
+    /**
+     * Rewind the board to the state right after move [index] in the log,
+     * without touching the stored move history. If the player then plays a
+     * new move, [applyMove]/[passTurn] truncate everything past [index].
+     */
+    fun jumpTo(index: Int) {
+        if (index < 0 || index >= moves.size) return
+        if (index == _viewingIndex.value) return
+        botJob?.cancel()
+        _botThinking.value = false
+        _flips.value = FlipAnimations()
+        _animating.value = false
+        var s = GameState()
+        for (i in 0..index) s = s.play(moves[i]) ?: return
+        _state.value = s
+        _viewingIndex.value = index
+        // No maybeRunBot(): the player drives from here. A new tap/pass
+        // commits the branch; otherwise they are free to keep browsing.
     }
 
     fun resetGame() {
@@ -138,9 +178,12 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     fun passTurn() {
         val cur = _state.value
         if (cur.legalMoves.isNotEmpty()) return
+        val mover = cur.toMove
         val next = cur.play(Move.PASS) ?: return
+        truncateToViewing()
         moves.add(Move.PASS)
         _state.value = next
+        appendLog(Move.PASS, mover, next)
         maybeRunBot()
     }
 
@@ -151,13 +194,34 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         _botThinking.value = false
         _animating.value = false
         moves.clear()
+        _log.value = emptyList()
+        _viewingIndex.value = -1
     }
+
+    /** If the player is viewing a historical state, drop every ply after it. */
+    private fun truncateToViewing() {
+        val idx = _viewingIndex.value
+        if (idx >= moves.size - 1) return
+        while (moves.size > idx + 1) moves.removeAt(moves.size - 1)
+        _log.update { it.take(idx + 1) }
+    }
+
+    private fun appendLog(move: Move, mover: Player, next: GameState) {
+        _log.update { it + MoveLogEntry(labelFor(move), mover, next.blackCount, next.whiteCount) }
+        _viewingIndex.value = moves.size - 1
+    }
+
+    private fun labelFor(move: Move): String =
+        if (move.isPass) "—" else "${'A' + move.x}${move.y + 1}"
 
     private fun applyMove(move: Move) {
         val cur = _state.value
+        val mover = cur.toMove
         val next = cur.play(move) ?: return
+        truncateToViewing()
         _state.value = next
         moves.add(move)
+        appendLog(move, mover, next)
         val anim = AppConfig.Animation
         var totalMs = 0L
         if (next.lastFlips.isNotEmpty()) {
@@ -201,9 +265,11 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         if (cur.legalMoves.isEmpty()) {
             viewModelScope.launch {
                 delay(AppConfig.Bot.AUTO_PASS_DELAY_MS)
+                val mover = cur.toMove
                 val next = cur.play(Move.PASS) ?: return@launch
                 moves.add(Move.PASS)
                 _state.value = next
+                appendLog(Move.PASS, mover, next)
                 maybeRunBot()
             }
             return

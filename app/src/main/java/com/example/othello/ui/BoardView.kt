@@ -6,9 +6,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -22,7 +28,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.othello.R
 import com.example.othello.config.AppConfig
 import com.example.othello.game.Cell
@@ -38,23 +47,64 @@ fun BoardView(
     modifier: Modifier = Modifier,
 ) {
     val cfg = AppConfig.Board
+    val notation = AppConfig.Notation
+    val sideReserve = if (notation.SHOW) notation.STRIP_SIZE + notation.GAP else 0.dp
 
     BoxWithConstraints(
         modifier.fillMaxWidth(),
         contentAlignment = Alignment.Center,
     ) {
         val density = LocalDensity.current
-        val boardPx = constraints.maxWidth.toFloat()
+        val sideReservePx = with(density) { sideReserve.toPx() }
+        val boardPx = (constraints.maxWidth.toFloat() - sideReservePx).coerceAtLeast(0f)
         val cellPx = boardPx / 8f
         val piecePx = cellPx * cfg.PIECE_TO_CELL_RATIO
         val boardDp = with(density) { boardPx.toDp() }
         val cellDp = with(density) { cellPx.toDp() }
         val pieceDp = with(density) { piecePx.toDp() }
 
-        Box(
-            Modifier.size(boardDp),
-            contentAlignment = Alignment.TopStart,
-        ) {
+        Column {
+            if (notation.SHOW) {
+                FileLabels(cellDp, notation.STRIP_SIZE, sideReserve)
+                Spacer(Modifier.height(notation.GAP))
+            }
+            Row(verticalAlignment = Alignment.Top) {
+                if (notation.SHOW) {
+                    RankLabels(cellDp, notation.STRIP_SIZE)
+                    Spacer(Modifier.width(notation.GAP))
+                }
+                Board(
+                    state = state,
+                    flips = flips,
+                    showHints = showHints,
+                    onTap = onTap,
+                    boardDp = boardDp,
+                    cellDp = cellDp,
+                    pieceDp = pieceDp,
+                    cellPx = cellPx,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun Board(
+    state: GameState,
+    flips: FlipAnimations,
+    showHints: Boolean,
+    onTap: (Int, Int) -> Unit,
+    boardDp: Dp,
+    cellDp: Dp,
+    pieceDp: Dp,
+    cellPx: Float,
+) {
+    val cfg = AppConfig.Board
+    val density = LocalDensity.current
+    Box(
+        Modifier.size(boardDp),
+        contentAlignment = Alignment.TopStart,
+    ) {
             Image(
                 painter = painterResource(id = R.drawable.board),
                 contentDescription = null,
@@ -129,6 +179,38 @@ fun BoardView(
                         })
                     }
                 }
+            }
+    }
+}
+
+@Composable
+private fun FileLabels(cellDp: Dp, stripHeight: Dp, leftOffset: Dp) {
+    Row(Modifier.height(stripHeight), verticalAlignment = Alignment.CenterVertically) {
+        Spacer(Modifier.width(leftOffset))
+        for (c in 'A'..'H') {
+            Box(Modifier.size(width = cellDp, height = stripHeight), contentAlignment = Alignment.Center) {
+                Text(
+                    c.toString(),
+                    color = Felt.OnDarkDim,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RankLabels(cellDp: Dp, stripWidth: Dp) {
+    Column(Modifier.width(stripWidth), horizontalAlignment = Alignment.CenterHorizontally) {
+        for (n in 1..8) {
+            Box(Modifier.size(width = stripWidth, height = cellDp), contentAlignment = Alignment.Center) {
+                Text(
+                    n.toString(),
+                    color = Felt.OnDarkDim,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                )
             }
         }
     }

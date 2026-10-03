@@ -59,6 +59,8 @@ fun GameScreen(
     val thinking by vm.botThinking.collectAsState()
     val animating by vm.animating.collectAsState()
     val players by vm.players.collectAsState()
+    val log by vm.log.collectAsState()
+    val viewingIndex by vm.viewingIndex.collectAsState()
     val haptics = rememberHaptics()
     var paused by remember { mutableStateOf(false) }
 
@@ -146,6 +148,15 @@ fun GameScreen(
                             }
                         }
                     }
+
+                    Spacer(Modifier.weight(1f))
+                    MoveLog(
+                        entries = log,
+                        currentIndex = viewingIndex,
+                        onJump = { idx -> haptics.tap(); vm.jumpTo(idx) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
                 }
             }
         }

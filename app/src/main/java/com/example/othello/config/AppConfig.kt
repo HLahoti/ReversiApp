@@ -108,6 +108,20 @@ object AppConfig {
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // Board notation (chessboard-style A–H / 1–8 labels)
+    // ─────────────────────────────────────────────────────────────────────
+    object Notation {
+        /** Toggle the notation labels around the board. */
+        const val SHOW: Boolean = true
+
+        /** Width of the rank-number strips (left/right) and height of the file-letter strips (top/bottom). */
+        val STRIP_SIZE: Dp = 18.dp
+
+        /** Gap between the labels and the board edge. */
+        val GAP: Dp = 2.dp
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // Pause overlay
     // ─────────────────────────────────────────────────────────────────────
     object Pause {
