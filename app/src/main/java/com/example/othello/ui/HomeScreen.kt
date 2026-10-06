@@ -56,6 +56,7 @@ import kotlinx.coroutines.delay
 fun HomeScreen(
     onStartTwoPlayer: (resume: Boolean) -> Unit,
     onStartVsBot: (humanColor: HumanColorChoice, difficulty: Difficulty, resume: Boolean) -> Unit,
+    onStartOnline: () -> Unit,
 ) {
     val haptics = rememberHaptics()
     val ctx = LocalContext.current
@@ -111,6 +112,7 @@ fun HomeScreen(
                 null -> ModePicker(
                     onPickTwoPlayer = { haptics.tap(); step = SavedMode.TWO_PLAYER },
                     onPickVsBot = { haptics.tap(); step = SavedMode.VS_BOT },
+                    onPickOnline = { haptics.confirm(); onStartOnline() },
                 )
                 SavedMode.TWO_PLAYER -> OptionsPanel(
                     title = "Pass & play",
@@ -219,6 +221,7 @@ fun HomeScreen(
 private fun ModePicker(
     onPickTwoPlayer: () -> Unit,
     onPickVsBot: () -> Unit,
+    onPickOnline: () -> Unit,
 ) {
     Column(
         Modifier.fillMaxWidth(),
@@ -233,6 +236,12 @@ private fun ModePicker(
         PrimaryButton(
             text = "Play against the bot",
             onClick = onPickVsBot,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(12.dp))
+        PrimaryButton(
+            text = "Play online",
+            onClick = onPickOnline,
             modifier = Modifier.fillMaxWidth(),
         )
     }

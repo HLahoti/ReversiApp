@@ -13,6 +13,10 @@ import com.example.othello.data.SavedMove
 import com.example.othello.game.GameState
 import com.example.othello.game.Move
 import com.example.othello.game.Player
+import com.example.othello.net.OnlineScope
+import com.example.othello.net.OnlineSession
+import com.example.othello.net.SessionState
+import com.example.othello.net.SessionStatus
 import kotlin.math.abs
 import kotlin.math.max
 import kotlinx.coroutines.Dispatchers
@@ -21,12 +25,20 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** Who plays each colour. */
-enum class Participant { HUMAN, BOT }
+enum class Participant {
+    /** A seat driven by the user holding this device. */
+    HUMAN,
+    /** A seat driven by the local bot. */
+    BOT,
+    /** A seat driven by another device, delivered via [OnlineSession]. */
+    REMOTE,
+}
 
 data class Players(val black: Participant, val white: Participant) {
     fun of(p: Player) = if (p == Player.BLACK) black else white
@@ -47,6 +59,13 @@ data class MoveLogEntry(
     val mover: Player,
     val black: Int,
     val white: Int,
+)
+
+/** Snapshot of the online layer surfaced to the UI (nullable when offline). */
+data class OnlineUiState(
+    val status: SessionStatus,
+    val opponentName: String?,
+    val error: String?,
 )
 
 class GameViewModel(app: Application) : AndroidViewModel(app) {
@@ -80,8 +99,13 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private val _openingFrame = MutableStateFlow<Int?>(null)
     val openingFrame: StateFlow<Int?> = _openingFrame.asStateFlow()
 
+    /** Null when playing offline; populated in online mode. */
+    private val _online = MutableStateFlow<OnlineUiState?>(null)
+    val online: StateFlow<OnlineUiState?> = _online.asStateFlow()
+
     private var botJob: Job? = null
     private var openingJob: Job? = null
+    private var sessionJob: Job? = null
     private var bot: Bot? = null
     private var difficulty: Difficulty? = null
 
@@ -90,6 +114,12 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Set once configure/resume has run, so persist() knows which file to write. */
     private var mode: SavedMode? = null
+
+    // ── Online-mode fields ────────────────────────────────────────────────
+    private var session: OnlineSession? = null
+    private var localColor: Player? = null
+
+    private val isOnline: Boolean get() = session != null
 
     fun configure(players: Players, difficulty: Difficulty? = null) {
         _players.value = players
@@ -126,6 +156,95 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         maybeRunBot()
     }
 
+    /**
+     * Switch this view-model into online mode: taps for [localColor] route
+     * through [session], and all moves in the room (ours and theirs) replay
+     * through the normal engine as they arrive.
+     *
+     * The view-model takes ownership of [session] and will close it on
+     * [onCleared], [leaveOnline], or an explicit [resetGame] call.
+     */
+    fun configureOnline(session: OnlineSession, localColor: Player) {
+        this.session = session
+        this.localColor = localColor
+        _players.value = Players(
+            black = if (localColor == Player.BLACK) Participant.HUMAN else Participant.REMOTE,
+            white = if (localColor == Player.WHITE) Participant.HUMAN else Participant.REMOTE,
+        )
+        mode = null // online games are not persisted locally
+        setDifficulty(null)
+        resetInternal()
+        _online.value = OnlineUiState(
+            status = session.state.value.status,
+            opponentName = session.state.value.opponent?.displayName,
+            error = session.state.value.error,
+        )
+        subscribeToSession(session)
+        playOpening()
+    }
+
+    /**
+     * Cleanly end the current online game, deleting the room on the backend
+     * so neither side's device is left tracking an orphan. Idempotent.
+     *
+     * Dispatched on [OnlineScope] (not [viewModelScope]) so the finish
+     * survives the VM being cleared during the same back-navigation that
+     * triggered this call.
+     */
+    fun leaveOnline() {
+        val s = session ?: return
+        sessionJob?.cancel()
+        sessionJob = null
+        OnlineScope.launch { runCatching { s.finish() } }
+        session = null
+        localColor = null
+        _online.value = null
+    }
+
+    override fun onCleared() {
+        // If leaveOnline() wasn't called explicitly (e.g. activity killed by
+        // the system), tear down listeners but leave the room — the next app
+        // launch sweeps whatever's still in the tracker.
+        session?.let { s ->
+            sessionJob?.cancel()
+            s.close()
+        }
+        super.onCleared()
+    }
+
+    private fun subscribeToSession(session: OnlineSession) {
+        sessionJob?.cancel()
+        sessionJob = viewModelScope.launch {
+            session.state.collectLatest { snapshot -> onSessionSnapshot(snapshot) }
+        }
+    }
+
+    /**
+     * Project a session snapshot onto the local game. Any new moves (beyond
+     * what we've already applied) are played through the engine in order;
+     * our own echoes are naturally dropped because [moves.size] already
+     * covers them.
+     */
+    private fun onSessionSnapshot(snapshot: SessionState) {
+        _online.value = OnlineUiState(
+            status = snapshot.status,
+            opponentName = snapshot.opponent?.displayName,
+            error = snapshot.error,
+        )
+        // Apply any moves we haven't seen yet, in order.
+        if (snapshot.moves.size > moves.size) {
+            for (i in moves.size until snapshot.moves.size) {
+                val rm = snapshot.moves[i]
+                val expectedSeq = i + 1
+                if (rm.seq != expectedSeq) {
+                    // Out-of-order write; the next snapshot should repair it.
+                    return
+                }
+                applyMove(rm.toMove(), broadcast = false)
+            }
+        }
+    }
+
     private fun setDifficulty(d: Difficulty?) {
         if (d != difficulty) {
             difficulty = d
@@ -137,8 +256,12 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
      * Rewind the board to the state right after move [index] in the log,
      * without touching the stored move history. If the player then plays a
      * new move, [applyMove]/[passTurn] truncate everything past [index].
+     *
+     * No-op in online mode: history is shared across devices and cannot be
+     * rewound unilaterally.
      */
     fun jumpTo(index: Int) {
+        if (isOnline) return
         if (index < 0 || index >= moves.size) return
         if (index == _viewingIndex.value) return
         botJob?.cancel()
@@ -153,7 +276,15 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         // commits the branch; otherwise they are free to keep browsing.
     }
 
+    /**
+     * Reset the local game. In online mode we leave the room instead; a
+     * fresh game would need both sides to agree.
+     */
     fun resetGame() {
+        if (isOnline) {
+            leaveOnline()
+            return
+        }
         botJob?.cancel()
         resetInternal()
         mode?.let(store::clear)
@@ -163,9 +294,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * Call on back / app pause. Writes the current unfinished game to the
      * matching save slot, or clears it if there is nothing worth resuming
-     * (no moves yet, or the game is already over).
+     * (no moves yet, or the game is already over). No-op online.
      */
     fun persist() {
+        if (isOnline) return
         val m = mode ?: return
         if (moves.isEmpty() || _state.value.isTerminal) {
             store.clear(m)
@@ -186,6 +318,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         if (_animating.value) return
         val cur = _state.value
         if (_players.value.of(cur.toMove) != Participant.HUMAN) return
+        if (isOnline && cur.toMove != localColor) return
         val mv = Move(x, y)
         if (!cur.board.isLegal(mv, cur.toMove)) return
         applyMove(mv)
@@ -194,12 +327,14 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     fun passTurn() {
         val cur = _state.value
         if (cur.legalMoves.isNotEmpty()) return
+        if (isOnline && cur.toMove != localColor) return
         val mover = cur.toMove
         val next = cur.play(Move.PASS) ?: return
         truncateToViewing()
         moves.add(Move.PASS)
         _state.value = next
         appendLog(Move.PASS, mover, next)
+        broadcastIfOnline(mover, Move.PASS)
         maybeRunBot()
     }
 
@@ -253,7 +388,14 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private fun labelFor(move: Move): String =
         if (move.isPass) "—" else "${'A' + move.x}${move.y + 1}"
 
-    private fun applyMove(move: Move) {
+    /**
+     * Apply [move] to the live board, run the flip animation, and (unless
+     * [broadcast] is false) publish it over the online session.
+     *
+     * `broadcast = false` is used when we're replaying a move that already
+     * came in through the session listener — we must not round-trip it back.
+     */
+    private fun applyMove(move: Move, broadcast: Boolean = true) {
         val cur = _state.value
         val mover = cur.toMove
         val next = cur.play(move) ?: return
@@ -261,6 +403,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         _state.value = next
         moves.add(move)
         appendLog(move, mover, next)
+        if (broadcast) broadcastIfOnline(mover, move)
+        if (next.isTerminal) finishOnlineIfAny()
         val anim = AppConfig.Animation
         var totalMs = 0L
         if (next.lastFlips.isNotEmpty()) {
@@ -298,10 +442,48 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Both sides see the terminal position via their own copies of the move
+     * stream, so both will race to call finish(). That's fine — the delete is
+     * idempotent, the tracker entry is cleared regardless, and the first to
+     * win just makes the other's attempt a no-op.
+     */
+    private fun finishOnlineIfAny() {
+        val s = session ?: return
+        sessionJob?.cancel()
+        sessionJob = null
+        OnlineScope.launch { runCatching { s.finish() } }
+        session = null
+        // Keep _online populated so the end-game panel still has context.
+    }
+
+    /** Fire-and-forget send of a locally-applied move to the room. */
+    private fun broadcastIfOnline(by: Player, move: Move) {
+        val s = session ?: return
+        val seq = moves.size // moves already contains this move; seq is 1-based.
+        viewModelScope.launch {
+            runCatching { s.sendMove(seq, by, move) }
+                .onFailure { t ->
+                    _online.update { prev ->
+                        prev?.copy(error = t.message ?: "Could not send move.")
+                    }
+                }
+        }
+    }
+
     private fun maybeRunBot() {
         val cur = _state.value
         if (cur.isTerminal) return
+
+        // Auto-pass when the side-to-move has no legal moves. In online mode
+        // we only ever auto-pass for ourselves — the opponent's auto-pass
+        // reaches us through the session as a normal move.
         if (cur.legalMoves.isEmpty()) {
+            val shouldAutoPass = when {
+                isOnline -> cur.toMove == localColor
+                else -> true
+            }
+            if (!shouldAutoPass) return
             viewModelScope.launch {
                 delay(AppConfig.Bot.AUTO_PASS_DELAY_MS)
                 val mover = cur.toMove
@@ -309,6 +491,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 moves.add(Move.PASS)
                 _state.value = next
                 appendLog(Move.PASS, mover, next)
+                broadcastIfOnline(mover, Move.PASS)
                 maybeRunBot()
             }
             return

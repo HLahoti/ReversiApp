@@ -18,6 +18,9 @@ build/
 # Local SDK path — differs per machine
 local.properties
 
+# Firebase project config — download per environment
+app/google-services.json
+
 # macOS
 .DS_Store
 
