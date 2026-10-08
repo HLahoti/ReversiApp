@@ -21,6 +21,11 @@ local.properties
 # Firebase project config — download per environment
 app/google-services.json
 
+# Release signing — keep off-repo, back up elsewhere (password manager / cloud)
+keystore.properties
+*.jks
+*.keystore
+
 # macOS
 .DS_Store
 
