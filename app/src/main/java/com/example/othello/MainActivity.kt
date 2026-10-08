@@ -23,6 +23,7 @@ import com.example.othello.net.firebase.FirebaseOnlineClient
 import com.example.othello.ui.GameScreen
 import com.example.othello.ui.GameViewModel
 import com.example.othello.ui.HomeScreen
+import com.example.othello.ui.HowToPlayScreen
 import com.example.othello.ui.HumanColorChoice
 import com.example.othello.ui.OnlineLobbyScreen
 import com.example.othello.ui.OthelloTheme
@@ -70,7 +71,11 @@ class MainActivity : ComponentActivity() {
                                 )
                             },
                             onStartOnline = { nav.navigate("online/lobby") },
+                            onHowToPlay = { nav.navigate("howto") },
                         )
+                    }
+                    composable("howto") {
+                        HowToPlayScreen(onBack = { nav.popBackStack() })
                     }
                     composable(
                         route = "game/2p?resume={resume}",

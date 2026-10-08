@@ -89,5 +89,24 @@ class Board private constructor(private val cells: IntArray) {
         )
         fun inBounds(x: Int, y: Int) = x in 0 until SIZE && y in 0 until SIZE
         private fun idx(x: Int, y: Int) = y * SIZE + x
+
+        /**
+         * Builds an arbitrary position from [SIZE] row strings, one char per
+         * square: 'B'/'b' black, 'W'/'w' white, anything else (e.g. '.') empty.
+         * Used to author fixed positions such as the how-to-play tutorial;
+         * it does not check that the position is reachable in real play.
+         */
+        fun fromRows(rows: List<String>): Board {
+            require(rows.size == SIZE) { "need $SIZE rows, got ${rows.size}" }
+            val cells = IntArray(SIZE * SIZE)
+            for (y in 0 until SIZE) for (x in 0 until SIZE) {
+                cells[idx(x, y)] = when (rows[y].getOrNull(x)) {
+                    'B', 'b' -> Cell.BLACK.ordinal
+                    'W', 'w' -> Cell.WHITE.ordinal
+                    else -> Cell.EMPTY.ordinal
+                }
+            }
+            return Board(cells)
+        }
     }
 }

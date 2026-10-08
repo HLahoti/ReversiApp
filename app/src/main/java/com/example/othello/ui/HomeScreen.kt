@@ -57,6 +57,7 @@ fun HomeScreen(
     onStartTwoPlayer: (resume: Boolean) -> Unit,
     onStartVsBot: (humanColor: HumanColorChoice, difficulty: Difficulty, resume: Boolean) -> Unit,
     onStartOnline: () -> Unit,
+    onHowToPlay: () -> Unit,
 ) {
     val haptics = rememberHaptics()
     val ctx = LocalContext.current
@@ -113,6 +114,7 @@ fun HomeScreen(
                     onPickTwoPlayer = { haptics.tap(); step = SavedMode.TWO_PLAYER },
                     onPickVsBot = { haptics.tap(); step = SavedMode.VS_BOT },
                     onPickOnline = { haptics.confirm(); onStartOnline() },
+                    onHowToPlay = { haptics.tap(); onHowToPlay() },
                 )
                 SavedMode.TWO_PLAYER -> OptionsPanel(
                     title = "Pass & play",
@@ -222,6 +224,7 @@ private fun ModePicker(
     onPickTwoPlayer: () -> Unit,
     onPickVsBot: () -> Unit,
     onPickOnline: () -> Unit,
+    onHowToPlay: () -> Unit,
 ) {
     Column(
         Modifier.fillMaxWidth(),
@@ -242,6 +245,12 @@ private fun ModePicker(
         PrimaryButton(
             text = "Play online",
             onClick = onPickOnline,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(12.dp))
+        SecondaryButton(
+            text = "How to play",
+            onClick = onHowToPlay,
             modifier = Modifier.fillMaxWidth(),
         )
     }
