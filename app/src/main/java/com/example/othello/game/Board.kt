@@ -69,12 +69,6 @@ class Board private constructor(private val cells: IntArray) {
     fun isTerminal(): Boolean = !hasAnyMove(Player.BLACK) && !hasAnyMove(Player.WHITE)
     fun count(c: Cell): Int = cells.count { it == c.ordinal }
 
-    /** Encode as 64 floats, 1.0 where `perspective`'s disc sits. */
-    fun encode(perspective: Player): FloatArray {
-        val own = perspective.toCell().ordinal
-        return FloatArray(64) { if (cells[it] == own) 1f else 0f }
-    }
-
     private fun wouldFlip(x: Int, y: Int, dx: Int, dy: Int, p: Player): Boolean {
         val own = p.toCell().ordinal
         val opp = p.opponent().toCell().ordinal
