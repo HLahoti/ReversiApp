@@ -1,7 +1,7 @@
 package com.example.othello.data
 
 import android.content.Context
-import com.example.othello.bot.Difficulty
+import com.example.othello.bot.Opponent
 import com.example.othello.game.Player
 import java.io.File
 import kotlinx.serialization.Serializable
@@ -14,8 +14,10 @@ data class SavedMove(val x: Int, val y: Int, val isPass: Boolean = false)
 /**
  * On-disk representation of a paused game. `humanColor` is null for a
  * two-player (pass-and-play) save and `"BLACK"`/`"WHITE"` for a vs-bot save.
- * `difficulty` is the [Difficulty] enum name (null for two-player saves and
- * for older vs-bot saves written before the picker existed).
+ * `difficulty` is the [Opponent] enum name — the key predates the named
+ * roster and is kept so older saves still parse; [Opponent.fromSaved] maps the
+ * legacy EASY/MEDIUM/HARD values. Null for two-player saves and for vs-bot
+ * saves written before the picker existed.
  * The move list replays from the standard Othello opening position.
  */
 @Serializable
@@ -57,13 +59,13 @@ class GameStore(context: Context) {
         )
     }
 
-    fun writeVsBot(moves: List<SavedMove>, humanColor: Player, difficulty: Difficulty?) {
+    fun writeVsBot(moves: List<SavedMove>, humanColor: Player, opponent: Opponent?) {
         vsBotFile.writeText(
             json.encodeToString(
                 SavedGame.serializer(),
                 SavedGame(
                     humanColor = humanColor.name,
-                    difficulty = difficulty?.name,
+                    difficulty = opponent?.name,
                     moves = moves,
                 ),
             )

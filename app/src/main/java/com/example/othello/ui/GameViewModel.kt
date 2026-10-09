@@ -4,7 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.othello.bot.Bot
-import com.example.othello.bot.Difficulty
+import com.example.othello.bot.Opponent
 import com.example.othello.config.AppConfig
 import com.example.othello.data.GameStore
 import com.example.othello.data.SavedGame
@@ -107,7 +107,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private var openingJob: Job? = null
     private var sessionJob: Job? = null
     private var bot: Bot? = null
-    private var difficulty: Difficulty? = null
+    private var opponent: Opponent? = null
 
     /** Every ply that has been applied, in order. Replayed on resume, written on persist. */
     private val moves = mutableListOf<Move>()
@@ -121,10 +121,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     private val isOnline: Boolean get() = session != null
 
-    fun configure(players: Players, difficulty: Difficulty? = null) {
+    fun configure(players: Players, opponent: Opponent? = null) {
         _players.value = players
         mode = modeFor(players)
-        setDifficulty(difficulty)
+        setOpponent(opponent)
         resetInternal()
         mode?.let(store::clear)
         playOpening()
@@ -138,7 +138,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     fun resume(saved: SavedGame, players: Players) {
         _players.value = players
         mode = modeFor(players)
-        setDifficulty(saved.difficulty?.let { runCatching { Difficulty.valueOf(it) }.getOrNull() })
+        setOpponent(Opponent.fromSaved(saved.difficulty))
         resetInternal()
         var s = GameState()
         val entries = mutableListOf<MoveLogEntry>()
@@ -172,7 +172,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             white = if (localColor == Player.WHITE) Participant.HUMAN else Participant.REMOTE,
         )
         mode = null // online games are not persisted locally
-        setDifficulty(null)
+        setOpponent(null)
         resetInternal()
         _online.value = OnlineUiState(
             status = session.state.value.status,
@@ -245,9 +245,9 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun setDifficulty(d: Difficulty?) {
-        if (d != difficulty) {
-            difficulty = d
+    private fun setOpponent(o: Opponent?) {
+        if (o != opponent) {
+            opponent = o
             bot = null
         }
     }
@@ -308,7 +308,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             SavedMode.TWO_PLAYER -> store.writeTwoPlayer(saved)
             SavedMode.VS_BOT -> {
                 val human = humanColorIn(_players.value) ?: return
-                store.writeVsBot(saved, human, difficulty)
+                store.writeVsBot(saved, human, opponent)
             }
         }
     }
@@ -498,10 +498,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         }
         if (_players.value.of(cur.toMove) != Participant.BOT) return
         _botThinking.value = true
-        val d = difficulty ?: Difficulty.MEDIUM
+        val o = opponent ?: Opponent.DEFAULT
         botJob = viewModelScope.launch {
             val chosen = withContext(Dispatchers.Default) {
-                val b = bot ?: Bot.load(getApplication(), d).also { bot = it }
+                val b = bot ?: Bot.load(getApplication(), o).also { bot = it }
                 b.chooseMove(cur.board, cur.toMove)
             }
             _botThinking.value = false

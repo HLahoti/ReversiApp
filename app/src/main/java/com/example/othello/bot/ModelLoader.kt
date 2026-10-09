@@ -10,8 +10,8 @@ import java.io.InputStream
 
 /**
  * Reads a genome JSON file and builds the right [PositionEvaluator] for it,
- * choosing the architecture from the model's `network.type` (defaulting to the
- * dense MLP that every current export uses, which carries no such field).
+ * choosing the architecture from the model's `network.kind` (or `network.type`),
+ * defaulting to the dense MLP, whose exports carry neither field.
  *
  * This `when` is the *one* place to teach the app a new architecture: implement
  * a [PositionEvaluator] (with its own `fromJson` and board encoding), then add a
@@ -39,12 +39,13 @@ object ModelLoader {
     @OptIn(ExperimentalSerializationApi::class)
     fun load(stream: InputStream): LoadedModel {
         val env = json.decodeFromStream<Envelope>(stream)
-        val type = env.network["type"]?.jsonPrimitive?.content?.lowercase()
+        val type = (env.network["kind"] ?: env.network["type"])
+            ?.jsonPrimitive?.content?.lowercase()
             ?: NeuralNetworkEvaluator.TYPE
         val evaluator = when (type) {
             NeuralNetworkEvaluator.TYPE, "dense", "ffn" ->
                 NeuralNetworkEvaluator.fromJson(json, env.network)
-            // "cnn" -> CnnEvaluator.fromJson(json, env.network)  // ← future arch: one line
+            CnnEvaluator.TYPE -> CnnEvaluator.fromJson(json, env.network)
             else -> error("unknown model architecture '$type'")
         }
         return LoadedModel(evaluator, env.search_depth, env.id)

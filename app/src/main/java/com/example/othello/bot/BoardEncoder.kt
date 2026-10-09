@@ -33,7 +33,7 @@ object PlanesAndFeaturesEncoder : BoardEncoder {
 
     private const val PLANE = 64
     private const val NUM_PLANES = 3
-    private const val NUM_FEATURES = 13
+    internal const val NUM_FEATURES = 13
 
     override val size: Int = NUM_PLANES * PLANE + NUM_FEATURES // 205
 
@@ -76,9 +76,10 @@ object PlanesAndFeaturesEncoder : BoardEncoder {
 
     /**
      * The 13 strategic quantities corner-weighted play depends on, each roughly
-     * normalised to [0, 1]. Order matches the engine exactly.
+     * normalised to [0, 1]. Order matches the engine exactly. Shared with
+     * [CnnPlanesEncoder], whose head consumes the same features.
      */
-    private fun positionalFeatures(board: Board, perspective: Player): FloatArray {
+    internal fun positionalFeatures(board: Board, perspective: Player): FloatArray {
         val own = perspective.toCell()
         val opp = perspective.opponent().toCell()
 
@@ -159,5 +160,48 @@ object PlanesAndFeaturesEncoder : BoardEncoder {
             walk(cx, cy, 0, dyAlongLeftRight)
         }
         return marked.count { it }
+    }
+}
+
+/**
+ * The CNN encoding, mirroring OthelloEngine's `Board::networkInputCnn`: four
+ * 8×8 one-hot planes followed by the same 13 features as the MLP.
+ *   [0..63]    own-disc plane
+ *   [64..127]  opponent-disc plane
+ *   [128..191] perspective's legal-move plane
+ *   [192..255] empty-cell plane
+ *   [256..268] 13 hand-crafted positional features
+ * Planes are row-major (`y * 8 + x`), which is the [channel, y, x] layout the
+ * convolutions in [CnnNetwork] expect.
+ */
+object CnnPlanesEncoder : BoardEncoder {
+
+    private const val PLANE = 64
+    const val NUM_PLANES = 4
+    const val NUM_FEATURES = PlanesAndFeaturesEncoder.NUM_FEATURES
+
+    override val size: Int = NUM_PLANES * PLANE + NUM_FEATURES // 269
+
+    override fun encode(board: Board, perspective: Player): FloatArray {
+        val out = FloatArray(size)
+        val own = perspective.toCell()
+        val opp = perspective.opponent().toCell()
+
+        // Planes 0, 1, 3: own / opponent / empty.
+        for (y in 0 until 8) for (x in 0 until 8) {
+            val i = y * 8 + x
+            when (board.at(x, y)) {
+                own -> out[i] = 1f
+                opp -> out[PLANE + i] = 1f
+                else -> out[3 * PLANE + i] = 1f
+            }
+        }
+        // Plane 2: perspective's legal-move squares.
+        for (m in board.legalMoves(perspective)) {
+            if (!m.isPass) out[2 * PLANE + m.y * 8 + m.x] = 1f
+        }
+        val feats = PlanesAndFeaturesEncoder.positionalFeatures(board, perspective)
+        for (i in 0 until NUM_FEATURES) out[NUM_PLANES * PLANE + i] = feats[i]
+        return out
     }
 }

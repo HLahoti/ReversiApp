@@ -5,6 +5,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -46,7 +48,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.othello.R
-import com.example.othello.bot.Difficulty
+import com.example.othello.bot.Opponent
 import com.example.othello.config.AppConfig
 import com.example.othello.data.GameStore
 import com.example.othello.data.SavedMode
@@ -55,7 +57,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun HomeScreen(
     onStartTwoPlayer: (resume: Boolean) -> Unit,
-    onStartVsBot: (humanColor: HumanColorChoice, difficulty: Difficulty, resume: Boolean) -> Unit,
+    onStartVsBot: (humanColor: HumanColorChoice, opponent: Opponent, resume: Boolean) -> Unit,
     onStartOnline: () -> Unit,
     onHowToPlay: () -> Unit,
 ) {
@@ -63,7 +65,7 @@ fun HomeScreen(
     val ctx = LocalContext.current
     val store = remember(ctx) { GameStore(ctx.applicationContext) }
     var choice by remember { mutableStateOf(HumanColorChoice.RANDOM) }
-    var difficulty by remember { mutableStateOf(Difficulty.MEDIUM) }
+    var opponent by remember { mutableStateOf(Opponent.DEFAULT) }
 
     // Re-check save existence whenever this screen comes to the foreground
     // (back from a game, app resume) so Resume/New buttons stay in sync.
@@ -155,19 +157,19 @@ fun HomeScreen(
                             haptics.tap(); choice = HumanColorChoice.RANDOM
                         }
                     }
-                    Spacer(Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Difficulty.values().forEach { d ->
-                            ColorChip(d.label, difficulty == d) {
-                                haptics.tap(); difficulty = d
-                            }
-                        }
-                    }
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "Opponent · weakest → strongest",
+                        color = Felt.OnDark.copy(alpha = 0.7f),
+                        fontSize = 13.sp,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    OpponentChips(opponent) { haptics.tap(); opponent = it }
                     Spacer(Modifier.height(14.dp))
                     if (hasVsBot) {
                         PrimaryButton(
                             text = "Resume game",
-                            onClick = { haptics.confirm(); onStartVsBot(choice, difficulty, true) },
+                            onClick = { haptics.confirm(); onStartVsBot(choice, opponent, true) },
                             modifier = Modifier.fillMaxWidth(),
                         )
                         Spacer(Modifier.height(8.dp))
@@ -179,7 +181,7 @@ fun HomeScreen(
                     } else {
                         PrimaryButton(
                             text = "Start",
-                            onClick = { haptics.confirm(); onStartVsBot(choice, difficulty, false) },
+                            onClick = { haptics.confirm(); onStartVsBot(choice, opponent, false) },
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
@@ -208,7 +210,7 @@ fun HomeScreen(
                     confirmDiscard = null
                     when (mode) {
                         SavedMode.TWO_PLAYER -> onStartTwoPlayer(false)
-                        SavedMode.VS_BOT -> onStartVsBot(choice, difficulty, false)
+                        SavedMode.VS_BOT -> onStartVsBot(choice, opponent, false)
                     }
                 }) { Text("Discard & start") }
             },
@@ -373,6 +375,21 @@ private fun SecondaryButton(text: String, onClick: () -> Unit, modifier: Modifie
         ),
     ) {
         Text(text, fontSize = 15.sp, fontWeight = FontWeight.Normal)
+    }
+}
+
+/** The bot roster, in [Opponent] declaration order (weakest first), wrapping as needed. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun OpponentChips(selected: Opponent, onSelect: (Opponent) -> Unit) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Opponent.entries.forEach { o ->
+            ColorChip(o.displayName, selected == o) { onSelect(o) }
+        }
     }
 }
 

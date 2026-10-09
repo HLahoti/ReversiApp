@@ -13,7 +13,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.example.othello.bot.Difficulty
+import com.example.othello.bot.Opponent
 import com.example.othello.data.GameStore
 import com.example.othello.data.SavedMode
 import com.example.othello.game.Player
@@ -55,9 +55,9 @@ class MainActivity : ComponentActivity() {
                             onStartTwoPlayer = { resume ->
                                 nav.navigate("game/2p?resume=$resume")
                             },
-                            onStartVsBot = { choice, difficulty, resume ->
+                            onStartVsBot = { choice, opponent, resume ->
                                 // On resume we honour the human colour and
-                                // difficulty from the save. On a fresh start we
+                                // opponent from the save. On a fresh start we
                                 // honour the player's chip picks, resolving
                                 // RANDOM here.
                                 val human = when (choice) {
@@ -67,7 +67,7 @@ class MainActivity : ComponentActivity() {
                                         if (Random.nextBoolean()) Player.BLACK else Player.WHITE
                                 }
                                 nav.navigate(
-                                    "game/bot/${human.name}/${difficulty.name}?resume=$resume"
+                                    "game/bot/${human.name}/${opponent.name}?resume=$resume"
                                 )
                             },
                             onStartOnline = { nav.navigate("online/lobby") },
@@ -98,18 +98,17 @@ class MainActivity : ComponentActivity() {
                         GameScreen(vm, title = "2-player", onBack = { nav.popBackStack() })
                     }
                     composable(
-                        route = "game/bot/{human}/{difficulty}?resume={resume}",
+                        route = "game/bot/{human}/{opponent}?resume={resume}",
                         arguments = listOf(
                             navArgument("human") { type = NavType.StringType },
-                            navArgument("difficulty") { type = NavType.StringType },
+                            navArgument("opponent") { type = NavType.StringType },
                             navArgument("resume") {
                                 type = NavType.BoolType; defaultValue = false
                             },
                         ),
                     ) { entry ->
                         val humanArg = entry.arguments?.getString("human") ?: "BLACK"
-                        val difficultyArg = entry.arguments?.getString("difficulty")
-                            ?: Difficulty.MEDIUM.name
+                        val opponentArg = entry.arguments?.getString("opponent")
                         val resume = entry.arguments?.getBoolean("resume") == true
                         val vm: GameViewModel = viewModel()
                         val ctx = LocalContext.current
@@ -117,15 +116,13 @@ class MainActivity : ComponentActivity() {
                             val saved = if (resume) GameStore(ctx.applicationContext)
                                 .load(SavedMode.VS_BOT) else null
                             val human = Player.valueOf(saved?.humanColor ?: humanArg)
-                            val difficulty = runCatching {
-                                Difficulty.valueOf(difficultyArg)
-                            }.getOrDefault(Difficulty.MEDIUM)
+                            val opponent = Opponent.fromSaved(opponentArg) ?: Opponent.DEFAULT
                             val players = Players(
                                 black = if (human == Player.BLACK) Participant.HUMAN else Participant.BOT,
                                 white = if (human == Player.WHITE) Participant.HUMAN else Participant.BOT,
                             )
                             if (saved != null) vm.resume(saved, players)
-                            else vm.configure(players, difficulty)
+                            else vm.configure(players, opponent)
                         }
                         val humanName = Player.valueOf(humanArg).name.lowercase()
                         GameScreen(

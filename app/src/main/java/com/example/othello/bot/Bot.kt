@@ -24,9 +24,9 @@ class Bot(
         search.chooseMove(board, player) { b, p -> evaluator.evaluate(b, p) }
 
     companion object {
-        /** Load the bundled model for [difficulty]. */
-        fun load(ctx: Context, difficulty: Difficulty): Bot {
-            ctx.assets.open(difficulty.assetPath).use { stream ->
+        /** Load the bundled model for [opponent]. */
+        fun load(ctx: Context, opponent: Opponent): Bot {
+            ctx.assets.open(opponent.assetPath).use { stream ->
                 val model = ModelLoader.load(stream)
                 val depth = (AppConfig.Bot.SEARCH_DEPTH_OVERRIDE ?: model.searchDepth)
                     .coerceAtLeast(1)
