@@ -24,13 +24,13 @@ val keystoreProps = Properties().apply {
 }
 
 android {
-    namespace = "com.example.othello"
+    namespace = "com.example.reversi"
     compileSdk {
         version = release(37)
     }
 
     defaultConfig {
-        applicationId = "com.example.othello"
+        applicationId = "com.harshlahoti.reversi"
         minSdk = 24
         targetSdk = 37
         versionCode = 2

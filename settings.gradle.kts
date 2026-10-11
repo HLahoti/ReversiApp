@@ -22,6 +22,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Othello"
+rootProject.name = "Reversi"
 include(":app")
  

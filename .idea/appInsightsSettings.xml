@@ -8,7 +8,7 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="com.example.othello" />
+                  <option name="appId" value="com.harshlahoti.reversi" />
                   <option name="mobileSdkAppId" value="1:531419492392:android:0f011265563a961291c51d" />
                   <option name="projectId" value="othello-d159f" />
                   <option name="projectNumber" value="531419492392" />
