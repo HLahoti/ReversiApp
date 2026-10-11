@@ -130,6 +130,14 @@ object AppConfig {
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // Online play
+    // ─────────────────────────────────────────────────────────────────────
+    object Online {
+        /** Download page linked from the shared room-code message, for friends without the app. */
+        const val DOWNLOAD_URL: String = "https://hlahoti.github.io/ReversiApp/"
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // Pause overlay
     // ─────────────────────────────────────────────────────────────────────
     object Pause {

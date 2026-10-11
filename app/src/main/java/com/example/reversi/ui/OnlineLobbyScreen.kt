@@ -1,5 +1,7 @@
 package com.example.reversi.ui
 
+import android.content.ClipData
+import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,11 +14,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -28,12 +35,17 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -41,6 +53,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.reversi.game.Player
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun OnlineLobbyScreen(
@@ -88,6 +102,7 @@ fun OnlineLobbyScreen(
                 LobbyStep.JOINING -> StatusPanel("Joining room…")
                 LobbyStep.WAITING -> WaitingPanel(
                     code = state.roomCode?.value ?: "",
+                    onTap = { haptics.tap() },
                     onCancel = backToPicker,
                 )
             }
@@ -203,7 +218,19 @@ private fun StatusPanel(message: String) {
 }
 
 @Composable
-private fun WaitingPanel(code: String, onCancel: () -> Unit) {
+private fun WaitingPanel(code: String, onTap: () -> Unit, onCancel: () -> Unit) {
+    val context = LocalContext.current
+    val clipboard = LocalClipboard.current
+    val scope = rememberCoroutineScope()
+    var copied by remember { mutableStateOf(false) }
+
+    LaunchedEffect(copied) {
+        if (copied) {
+            delay(2000)
+            copied = false
+        }
+    }
+
     GlassPanel(Modifier.fillMaxWidth()) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -220,15 +247,48 @@ private fun WaitingPanel(code: String, onCancel: () -> Unit) {
                 letterSpacing = 8.sp,
             )
             Spacer(Modifier.height(14.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                IconLabelButton(
+                    text = if (copied) "Copied" else "Copy",
+                    icon = if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
+                    onClick = {
+                        onTap()
+                        scope.launch {
+                            clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("Room code", code)))
+                        }
+                        copied = true
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+                IconLabelButton(
+                    text = "Share",
+                    icon = Icons.Filled.Share,
+                    onClick = {
+                        onTap()
+                        val send = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(
+                                Intent.EXTRA_TEXT,
+                                "Join my Reversi game! Room code: $code\n\n" +
+                                    "Don't have the app? Download it here: " +
+                                    com.example.reversi.config.AppConfig.Online.DOWNLOAD_URL,
+                            )
+                        }
+                        context.startActivity(Intent.createChooser(send, "Share room code"))
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Spacer(Modifier.height(18.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(
                     color = Felt.Highlight,
                     strokeWidth = 2.dp,
-                    modifier = Modifier.height(16.dp),
+                    modifier = Modifier.size(16.dp),
                 )
-                Spacer(Modifier.height(0.dp))
+                Spacer(Modifier.width(10.dp))
                 Text(
-                    "   Waiting for opponent…",
+                    "Waiting for opponent…",
                     color = Felt.OnDark,
                     fontSize = 14.sp,
                 )
@@ -263,6 +323,28 @@ private fun SecondaryButton(text: String, onClick: () -> Unit, modifier: Modifie
             contentColor = Felt.OnDark,
         ),
     ) { Text(text, fontSize = 15.sp) }
+}
+
+@Composable
+private fun IconLabelButton(
+    text: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.height(44.dp),
+        shape = RoundedCornerShape(14.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = com.example.reversi.config.AppConfig.Palette.Glass,
+            contentColor = Felt.OnDark,
+        ),
+    ) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(text, fontSize = 15.sp)
+    }
 }
 
 @Composable
