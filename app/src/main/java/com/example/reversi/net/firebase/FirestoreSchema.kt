@@ -17,10 +17,14 @@ import java.util.Date
  *       hostName:    String?
  *       guestUid:    String?
  *       guestName:   String?
- *       moveCount:   Int        (count of child docs in /moves)
+ *       moveCount:   Int        (count of child docs in /moves for this round)
+ *       round:       Int        (0 for the first game, +1 per rematch)
+ *       rematchHost: Boolean    (host pressed "Play again" this round)
+ *       rematchGuest: Boolean   (guest pressed "Play again" this round)
  *       expiresAt:   Timestamp  (TTL field — see Firestore TTL policy)
  *
- *   rooms/{code}/moves/{"%06d" seq}:
+ *   rooms/{code}/moves/{"%03d-%06d" round, seq}:
+ *       round:       Int
  *       seq:         Int
  *       by:          "BLACK" | "WHITE"
  *       x:           Int
@@ -42,6 +46,9 @@ internal object FS {
     const val F_GUEST_UID = "guestUid"
     const val F_GUEST_NAME = "guestName"
     const val F_MOVE_COUNT = "moveCount"
+    const val F_ROUND = "round"
+    const val F_REMATCH_HOST = "rematchHost"
+    const val F_REMATCH_GUEST = "rematchGuest"
     const val F_EXPIRES_AT = "expiresAt"
 
     const val F_SEQ = "seq"
@@ -63,5 +70,5 @@ internal object FS {
     fun ttlFromNow(hours: Long = TTL_HOURS): Timestamp =
         Timestamp(Date(System.currentTimeMillis() + hours * 3600L * 1000L))
 
-    fun moveDocId(seq: Int): String = "%06d".format(seq)
+    fun moveDocId(round: Int, seq: Int): String = "%03d-%06d".format(round, seq)
 }

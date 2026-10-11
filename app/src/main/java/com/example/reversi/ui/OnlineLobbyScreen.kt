@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -32,6 +33,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -71,7 +73,14 @@ fun OnlineLobbyScreen(
         onGameReady(tok)
     }
 
-    val backToPicker = { haptics.tap(); vm.cancel() }
+    // Leaving a room someone may already have the code for destroys it, so
+    // that goes through a confirmation. Only an explicit back-out lands here;
+    // switching apps (e.g. via Share) leaves the room untouched.
+    var confirmClose by remember { mutableStateOf(false) }
+    val backToPicker = {
+        haptics.tap()
+        if (state.step == LobbyStep.WAITING) confirmClose = true else vm.cancel()
+    }
     BackHandler(enabled = state.step != LobbyStep.PICK) { backToPicker() }
 
     BackdropBackground {
@@ -86,8 +95,12 @@ fun OnlineLobbyScreen(
             TopBar(
                 title = "Play online",
                 onBack = {
-                    haptics.tap()
-                    if (state.step == LobbyStep.PICK) onBack() else vm.cancel()
+                    if (state.step == LobbyStep.PICK) {
+                        haptics.tap()
+                        onBack()
+                    } else {
+                        backToPicker()
+                    }
                 },
             )
             Spacer(Modifier.height(32.dp))
@@ -107,6 +120,26 @@ fun OnlineLobbyScreen(
                 )
             }
         }
+    }
+
+    if (confirmClose && state.step == LobbyStep.WAITING) {
+        AlertDialog(
+            onDismissRequest = { confirmClose = false },
+            title = { Text("Close this room?") },
+            text = {
+                Text("The room will be destroyed and the code you shared will stop working.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    haptics.confirm()
+                    confirmClose = false
+                    vm.cancel()
+                }) { Text("Close room") }
+            },
+            dismissButton = {
+                TextButton(onClick = { haptics.tap(); confirmClose = false }) { Text("Keep waiting") }
+            },
+        )
     }
 }
 

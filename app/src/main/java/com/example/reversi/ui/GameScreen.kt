@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -25,6 +27,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -65,6 +68,7 @@ fun GameScreen(
     val log by vm.log.collectAsState()
     val viewingIndex by vm.viewingIndex.collectAsState()
     val openingFrame by vm.openingFrame.collectAsState()
+    val online by vm.online.collectAsState()
     val haptics = rememberHaptics()
     var paused by remember { mutableStateOf(false) }
 
@@ -99,7 +103,13 @@ fun GameScreen(
                     TopBar(
                         title = title,
                         onBack = { haptics.tap(); onBack() },
-                        onReset = { haptics.confirm(); vm.resetGame() },
+                        // Online, a new game needs both players: that's the
+                        // rematch flow behind "Play again", not a reset button.
+                        onReset = if (online == null) {
+                            { haptics.confirm(); vm.resetGame() }
+                        } else {
+                            null
+                        },
                         onPause = { haptics.tap(); paused = true },
                     )
 
@@ -128,12 +138,18 @@ fun GameScreen(
                     )
 
                     Spacer(Modifier.height(16.dp))
+                    val o = online
                     if (state.isTerminal) {
                         EndGamePanel(
                             black = state.blackCount,
                             white = state.whiteCount,
+                            online = o,
                             onPlayAgain = { haptics.confirm(); vm.resetGame() },
                         )
+                    } else if (o != null && o.opponentLeft) {
+                        GlassPanel(Modifier.fillMaxWidth()) {
+                            Text("Your opponent left the game.", color = Felt.OnDark)
+                        }
                     } else if (state.legalMoves.isEmpty() &&
                         players.of(state.toMove) == Participant.HUMAN
                     ) {
@@ -203,7 +219,7 @@ private fun PausedOverlay(onResume: () -> Unit) {
 private fun TopBar(
     title: String,
     onBack: () -> Unit,
-    onReset: () -> Unit,
+    onReset: (() -> Unit)?,
     onPause: () -> Unit,
 ) {
     Row(
@@ -223,8 +239,10 @@ private fun TopBar(
             IconButton(onClick = onPause) {
                 Icon(Icons.Default.Pause, contentDescription = "Pause", tint = Felt.OnDark)
             }
-            IconButton(onClick = onReset) {
-                Icon(Icons.Default.Refresh, contentDescription = "Reset", tint = Felt.OnDark)
+            if (onReset != null) {
+                IconButton(onClick = onReset) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Reset", tint = Felt.OnDark)
+                }
             }
         }
     }
@@ -300,7 +318,12 @@ private fun ScoreBar(
 }
 
 @Composable
-private fun EndGamePanel(black: Int, white: Int, onPlayAgain: () -> Unit) {
+private fun EndGamePanel(
+    black: Int,
+    white: Int,
+    online: OnlineUiState?,
+    onPlayAgain: () -> Unit,
+) {
     val msg = when {
         black > white -> "Black wins · $black – $white"
         white > black -> "White wins · $white – $black"
@@ -310,13 +333,44 @@ private fun EndGamePanel(black: Int, white: Int, onPlayAgain: () -> Unit) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(msg, color = Felt.OnDark, fontSize = 20.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(12.dp))
-            Button(
-                onClick = onPlayAgain,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Felt.Highlight,
-                    contentColor = Felt.Deep,
-                ),
-            ) { Text("Play again") }
+            when {
+                online?.opponentLeft == true ->
+                    Text("Your opponent left the game.", color = Felt.OnDarkDim, fontSize = 14.sp)
+                online?.rematchRequested == true ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.height(40.dp),
+                    ) {
+                        CircularProgressIndicator(
+                            color = Felt.Highlight,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            "Waiting for opponent to rematch…",
+                            color = Felt.OnDark,
+                            fontSize = 14.sp,
+                        )
+                    }
+                else -> {
+                    if (online?.opponentWantsRematch == true) {
+                        Text(
+                            "Your opponent wants a rematch",
+                            color = Felt.OnDarkDim,
+                            fontSize = 14.sp,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    Button(
+                        onClick = onPlayAgain,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Felt.Highlight,
+                            contentColor = Felt.Deep,
+                        ),
+                    ) { Text("Play again") }
+                }
+            }
         }
     }
 }

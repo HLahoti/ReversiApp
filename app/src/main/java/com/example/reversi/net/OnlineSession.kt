@@ -27,7 +27,15 @@ interface OnlineSession {
      * [seq] MUST equal the index this move will occupy (1-based: the first
      * move is seq 1). The backend may reject out-of-order writes.
      */
-    suspend fun sendMove(seq: Int, by: com.example.reversi.game.Player, move: Move)
+    suspend fun sendMove(round: Int, seq: Int, by: com.example.reversi.game.Player, move: Move)
+
+    /**
+     * Ask for another game in this room after round [round] has ended. Once
+     * both players have asked, the room moves on to round `round + 1` with an
+     * empty move list and the players' colours swapped, and every [state]
+     * emission from then on carries the new round. A request for a round that has already moved on is ignored.
+     */
+    suspend fun requestRematch(round: Int)
 
     /**
      * Delete the room and every move under it, then close listeners.

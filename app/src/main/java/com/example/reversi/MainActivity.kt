@@ -2,9 +2,18 @@ package com.example.reversi
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -157,19 +166,49 @@ class MainActivity : ComponentActivity() {
                             }
                             vm.configureOnline(handoff.session, handoff.localColor)
                         }
+                        // Deletes the room on the backend before navigating
+                        // away, so the opponent sees that we left instead of
+                        // waiting on a move or rematch forever. The sweep on
+                        // next launch is still a backstop for the "activity
+                        // killed mid-game" case.
+                        val leave = {
+                            vm.leaveOnline()
+                            nav.popBackStack()
+                        }
+                        val online by vm.online.collectAsState()
+                        var confirmLeave by remember { mutableStateOf(false) }
+                        // Once the opponent has gone there's no room left to
+                        // destroy, so skip the confirmation.
+                        val requestLeave = {
+                            if (online?.opponentLeft == true) leave() else confirmLeave = true
+                        }
+                        BackHandler { requestLeave() }
                         GameScreen(
                             vm,
                             title = "Online",
-                            onBack = {
-                                // Deletes the room on the backend before
-                                // navigating away so neither side's device
-                                // is left with a stale room doc. The sweep
-                                // on next launch is still a backstop for
-                                // the "activity killed mid-game" case.
-                                vm.leaveOnline()
-                                nav.popBackStack()
-                            },
+                            onBack = { requestLeave() },
                         )
+                        if (confirmLeave) {
+                            AlertDialog(
+                                onDismissRequest = { confirmLeave = false },
+                                title = { Text("Leave the game?") },
+                                text = {
+                                    Text(
+                                        "The room will be destroyed and your opponent " +
+                                            "won't be able to continue or rematch.",
+                                    )
+                                },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        confirmLeave = false
+                                        leave()
+                                    }) { Text("Leave") }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { confirmLeave = false }) { Text("Stay") }
+                                },
+                            )
+                        }
                     }
                 }
             }

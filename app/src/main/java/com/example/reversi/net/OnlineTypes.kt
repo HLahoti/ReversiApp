@@ -75,6 +75,12 @@ data class SessionState(
     val opponent: PlayerIdentity? = null,
     /** Human-readable error, surfaced to the UI; cleared on next transition. */
     val error: String? = null,
+    /** Which game in this room is being played: 0 first, +1 per rematch. [moves] belong to it. */
+    val round: Int = 0,
+    /** This device has asked for a rematch of the current round. */
+    val rematchRequestedByMe: Boolean = false,
+    /** The other player has asked for a rematch of the current round. */
+    val rematchRequestedByOpponent: Boolean = false,
 ) {
     val isJoinable: Boolean get() = status == SessionStatus.WAITING && opponent == null
     val isPlayable: Boolean get() = status == SessionStatus.ACTIVE

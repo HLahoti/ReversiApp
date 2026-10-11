@@ -66,6 +66,12 @@ data class OnlineUiState(
     val status: SessionStatus,
     val opponentName: String?,
     val error: String?,
+    /** We've pressed "Play again" and are waiting on the opponent. */
+    val rematchRequested: Boolean = false,
+    /** The opponent has pressed "Play again" and is waiting on us. */
+    val opponentWantsRematch: Boolean = false,
+    /** The opponent left and the room is gone; no more moves or rematches. */
+    val opponentLeft: Boolean = false,
 )
 
 class GameViewModel(app: Application) : AndroidViewModel(app) {
@@ -116,10 +122,19 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private var mode: SavedMode? = null
 
     // ── Online-mode fields ────────────────────────────────────────────────
+    /**
+     * True for the whole life of an online game, including after it ends or
+     * the opponent leaves. Kept apart from [session] (the live connection),
+     * which can go away while the screen is still showing the online game —
+     * offline-only behaviour such as rewinding must stay off regardless.
+     */
+    private var isOnline = false
     private var session: OnlineSession? = null
     private var localColor: Player? = null
-
-    private val isOnline: Boolean get() = session != null
+    /** Which game in the room the board is showing; see [SessionState.round]. */
+    private var onlineRound = 0
+    /** "Play again" was pressed and the request hasn't shown up in a snapshot yet. */
+    private var rematchPending = false
 
     fun configure(players: Players, opponent: Opponent? = null) {
         _players.value = players
@@ -165,8 +180,11 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
      * [onCleared], [leaveOnline], or an explicit [resetGame] call.
      */
     fun configureOnline(session: OnlineSession, localColor: Player) {
+        isOnline = true
         this.session = session
         this.localColor = localColor
+        onlineRound = session.state.value.round
+        rematchPending = false
         _players.value = Players(
             black = if (localColor == Player.BLACK) Participant.HUMAN else Participant.REMOTE,
             white = if (localColor == Player.WHITE) Participant.HUMAN else Participant.REMOTE,
@@ -192,6 +210,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
      * triggered this call.
      */
     fun leaveOnline() {
+        isOnline = false
         val s = session ?: return
         sessionJob?.cancel()
         sessionJob = null
@@ -199,6 +218,28 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         session = null
         localColor = null
         _online.value = null
+    }
+
+    /**
+     * "Play again" in an online game: ask the opponent for a rematch. The
+     * board resets once both players have asked, when the session reports
+     * the next round (see [onSessionSnapshot]).
+     */
+    fun requestRematch() {
+        val s = session ?: return
+        if (!_state.value.isTerminal || rematchPending) return
+        val round = onlineRound
+        rematchPending = true
+        _online.update { it?.copy(rematchRequested = true) }
+        viewModelScope.launch {
+            runCatching { s.requestRematch(round) }
+                .onFailure { t ->
+                    rematchPending = false
+                    _online.update {
+                        it?.copy(rematchRequested = false, error = t.message ?: "Could not request a rematch.")
+                    }
+                }
+        }
     }
 
     override fun onCleared() {
@@ -226,10 +267,43 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
      * covers them.
      */
     private fun onSessionSnapshot(snapshot: SessionState) {
+        if (snapshot.status == SessionStatus.ABANDONED) {
+            // The opponent left and deleted the room. Stay on the board, but
+            // drop the connection; finish() also clears the tracker entry.
+            sessionJob?.cancel()
+            sessionJob = null
+            session?.let { s -> OnlineScope.launch { runCatching { s.finish() } } }
+            session = null
+            rematchPending = false
+            _online.value = OnlineUiState(
+                status = snapshot.status,
+                opponentName = snapshot.opponent?.displayName,
+                error = snapshot.error,
+                opponentLeft = true,
+            )
+            return
+        }
+        if (snapshot.round != onlineRound) {
+            // Both players asked for a rematch: start the new round's board.
+            onlineRound = snapshot.round
+            rematchPending = false
+            snapshot.myColor?.let { color ->
+                localColor = color
+                _players.value = Players(
+                    black = if (color == Player.BLACK) Participant.HUMAN else Participant.REMOTE,
+                    white = if (color == Player.WHITE) Participant.HUMAN else Participant.REMOTE,
+                )
+            }
+            resetInternal()
+            playOpening()
+        }
+        if (snapshot.rematchRequestedByMe) rematchPending = false
         _online.value = OnlineUiState(
             status = snapshot.status,
             opponentName = snapshot.opponent?.displayName,
             error = snapshot.error,
+            rematchRequested = snapshot.rematchRequestedByMe || rematchPending,
+            opponentWantsRematch = snapshot.rematchRequestedByOpponent,
         )
         // Apply any moves we haven't seen yet, in order.
         if (snapshot.moves.size > moves.size) {
@@ -277,12 +351,12 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Reset the local game. In online mode we leave the room instead; a
-     * fresh game would need both sides to agree.
+     * Reset the local game. In online mode a fresh game needs both sides to
+     * agree, so this asks for a rematch instead.
      */
     fun resetGame() {
         if (isOnline) {
-            leaveOnline()
+            requestRematch()
             return
         }
         botJob?.cancel()
@@ -318,7 +392,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         if (_animating.value) return
         val cur = _state.value
         if (_players.value.of(cur.toMove) != Participant.HUMAN) return
-        if (isOnline && cur.toMove != localColor) return
+        if (isOnline && (session == null || cur.toMove != localColor)) return
         val mv = Move(x, y)
         if (!cur.board.isLegal(mv, cur.toMove)) return
         applyMove(mv)
@@ -327,7 +401,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     fun passTurn() {
         val cur = _state.value
         if (cur.legalMoves.isNotEmpty()) return
-        if (isOnline && cur.toMove != localColor) return
+        if (isOnline && (session == null || cur.toMove != localColor)) return
         val mover = cur.toMove
         val next = cur.play(Move.PASS) ?: return
         truncateToViewing()
@@ -404,7 +478,6 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         moves.add(move)
         appendLog(move, mover, next)
         if (broadcast) broadcastIfOnline(mover, move)
-        if (next.isTerminal) finishOnlineIfAny()
         val anim = AppConfig.Animation
         var totalMs = 0L
         if (next.lastFlips.isNotEmpty()) {
@@ -442,27 +515,13 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /**
-     * Both sides see the terminal position via their own copies of the move
-     * stream, so both will race to call finish(). That's fine — the delete is
-     * idempotent, the tracker entry is cleared regardless, and the first to
-     * win just makes the other's attempt a no-op.
-     */
-    private fun finishOnlineIfAny() {
-        val s = session ?: return
-        sessionJob?.cancel()
-        sessionJob = null
-        OnlineScope.launch { runCatching { s.finish() } }
-        session = null
-        // Keep _online populated so the end-game panel still has context.
-    }
-
     /** Fire-and-forget send of a locally-applied move to the room. */
     private fun broadcastIfOnline(by: Player, move: Move) {
         val s = session ?: return
         val seq = moves.size // moves already contains this move; seq is 1-based.
+        val round = onlineRound
         viewModelScope.launch {
-            runCatching { s.sendMove(seq, by, move) }
+            runCatching { s.sendMove(round, seq, by, move) }
                 .onFailure { t ->
                     _online.update { prev ->
                         prev?.copy(error = t.message ?: "Could not send move.")
@@ -480,7 +539,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         // reaches us through the session as a normal move.
         if (cur.legalMoves.isEmpty()) {
             val shouldAutoPass = when {
-                isOnline -> cur.toMove == localColor
+                isOnline -> session != null && cur.toMove == localColor
                 else -> true
             }
             if (!shouldAutoPass) return

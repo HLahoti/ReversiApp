@@ -122,6 +122,9 @@ class FirebaseOnlineClient(
             FS.F_GUEST_UID to null,
             FS.F_GUEST_NAME to null,
             FS.F_MOVE_COUNT to 0,
+            FS.F_ROUND to 0,
+            FS.F_REMATCH_HOST to false,
+            FS.F_REMATCH_GUEST to false,
             FS.F_EXPIRES_AT to FS.ttlFromNow(),
         )
         try {
