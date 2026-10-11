@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Reversi</title>
+  <meta name="description" content="Classic Reversi for Android on a 3D-rendered board. Play a friend on one phone, take on five neural-network bots, or play online with a room code.">
+  <meta name="theme-color" content="#07110d">
+  <meta name="color-scheme" content="dark">
+  <meta property="og:title" content="Reversi — the classic flipping game for Android">
+  <meta property="og:description" content="Pass &amp; play, five neural-network bots, and online rooms. Free, no ads, no account.">
+  <meta property="og:image" content="assets/screen-game.webp">
+  <link rel="icon" href="assets/icon.webp" type="image/webp">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="backdrop" aria-hidden="true">
+    <span class="orb orb-a"></span>
+    <span class="orb orb-b"></span>
+  </div>
+
+  <header class="nav">
+    <a class="brand" href="#top">
+      <img src="assets/icon.webp" alt="" width="32" height="32">
+      <span>Reversi</span>
+    </a>
+    <a class="btn btn-small" href="https://github.com/HLahoti/ReversiApp/releases/latest/download/Reversi.apk" data-download>Download</a>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-copy">
+        <h1 class="load-in">Outflank. Flip. Take the board.</h1>
+        <p class="lede load-in">The classic game of Reversi on a board that looks real enough to touch. Play a friend on one phone, test yourself against five bots, or send someone a room code and play online.</p>
+        <div class="cta load-in">
+          <a class="btn btn-primary" href="https://github.com/HLahoti/ReversiApp/releases/latest/download/Reversi.apk" data-download>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M5 21h14"/></svg>
+            Download APK
+          </a>
+          <a class="btn btn-ghost" href="#install">How to install</a>
+        </div>
+        <p class="meta load-in">
+          <span data-version>Version 1.1</span>
+          <span class="dot" aria-hidden="true"></span>
+          <span data-size>24.1 MB</span>
+          <span class="dot" aria-hidden="true"></span>
+          <span>Android 7.0+</span>
+        </p>
+      </div>
+
+      <div class="hero-phone load-in">
+        <div class="phone phone-float">
+          <video class="screen" src="assets/demo.mp4" poster="assets/demo-poster.webp" autoplay muted loop playsinline preload="metadata" aria-label="Reversi demo: the board sets itself up, then a few moves are played against the bot"></video>
+        </div>
+      </div>
+    </section>
+
+    <section class="features" aria-label="Features">
+      <article class="feature reveal">
+        <div class="feature-shot"><div class="phone"><img class="screen" src="assets/screen-game.webp" alt="A game in progress against the bot, black 9 to white 13, with legal moves marked by dots and a move log along the bottom" width="720" height="1467" loading="lazy"></div></div>
+        <div class="feature-copy">
+          <p class="eyebrow">The board</p>
+          <h2>Every flip, rendered.</h2>
+          <p>The board and pieces are 3D renders, and every captured piece turns over with its own animation. Small dots show where you can move, and the log along the bottom keeps the score after every turn.</p>
+        </div>
+      </article>
+
+      <article class="feature reveal">
+        <div class="feature-shot"><div class="phone"><img class="screen" src="assets/screen-bot.webp" alt="Play against the bot: choose Black, White or Random, then pick an opponent from Vishy, Guk, Arjun, Pragg and Koneru" width="720" height="1467" loading="lazy"></div></div>
+        <div class="feature-copy">
+          <p class="eyebrow">Bots</p>
+          <h2>Five opponents, one ladder.</h2>
+          <p>Each bot is a neural network trained by playing itself over hundreds of generations. Start with Vishy, then climb to Koneru. Pick your colour or leave it to chance.</p>
+        </div>
+      </article>
+
+      <article class="feature reveal">
+        <div class="feature-shot"><div class="phone"><img class="screen" src="assets/screen-online.webp" alt="Play online: create a room as Black, White or Random, or join one with a room code" width="720" height="1467" loading="lazy"></div></div>
+        <div class="feature-copy">
+          <p class="eyebrow">Online</p>
+          <h2>Share a code, start a game.</h2>
+          <p>Create a room and send the code to a friend. They type it in and you're playing, wherever they are. No account to set up.</p>
+        </div>
+      </article>
+
+      <article class="feature reveal">
+        <div class="feature-shot"><div class="phone"><img class="screen" src="assets/screen-learn.webp" alt="How to play, step 4 of 5: one move flips White's whole row to black" width="720" height="1467" loading="lazy"></div></div>
+        <div class="feature-copy">
+          <p class="eyebrow">Learn</p>
+          <h2>New to Reversi? Five steps.</h2>
+          <p>A short walkthrough on a real board covers setup, legal moves, outflanking, flipping and how a game ends. You'll be playing in under a minute.</p>
+        </div>
+      </article>
+
+      <article class="feature reveal">
+        <div class="feature-shot"><div class="phone"><img class="screen" src="assets/screen-end.webp" alt="A finished game: White wins 40 to 24, with a Play again button" width="720" height="1467" loading="lazy"></div></div>
+        <div class="feature-copy">
+          <p class="eyebrow">Pass &amp; play</p>
+          <h2>One phone, two players.</h2>
+          <p>Hand the phone across the table and take turns. Leave in the middle of a game and it's waiting for you when you come back.</p>
+        </div>
+      </article>
+    </section>
+
+    <section class="roster reveal" aria-labelledby="roster-title">
+      <h2 id="roster-title">Meet the bots</h2>
+      <p class="section-lede">Listed weakest to strongest. Guk is where most people start.</p>
+      <ol class="bots">
+        <li>
+          <div class="strength" aria-label="Strength 1 of 5"><i class="on"></i><i></i><i></i><i></i><i></i></div>
+          <h3>Vishy</h3>
+          <p>A gentle first opponent for learning how the board works.</p>
+        </li>
+        <li>
+          <div class="strength" aria-label="Strength 2 of 5"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></div>
+          <h3>Guk</h3>
+          <p>The default. Punishes careless moves but leaves room to win.</p>
+        </li>
+        <li>
+          <div class="strength" aria-label="Strength 3 of 5"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></div>
+          <h3>Arjun</h3>
+          <p>The most trained of the first three. Expect a real fight.</p>
+        </li>
+        <li>
+          <div class="strength" aria-label="Strength 4 of 5"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div>
+          <h3>Pragg</h3>
+          <p>Reads the board as a picture, like an image model, and sees patterns the others miss.</p>
+        </li>
+        <li>
+          <div class="strength" aria-label="Strength 5 of 5"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div>
+          <h3>Koneru</h3>
+          <p>The strongest bot in the app. Beating Koneru is the goal.</p>
+        </li>
+      </ol>
+    </section>
+
+    <section class="gallery-section reveal" aria-labelledby="gallery-title">
+      <div class="section-head">
+        <h2 id="gallery-title">A closer look</h2>
+        <div class="gallery-nav">
+          <button class="icon-btn" type="button" data-scroll="-1" aria-label="Previous screenshots"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></button>
+          <button class="icon-btn" type="button" data-scroll="1" aria-label="Next screenshots"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+        </div>
+      </div>
+      <div class="gallery" tabindex="0" aria-label="Screenshots, scroll sideways">
+        <figure><div class="phone"><img class="screen" src="assets/screen-home.webp" alt="Home screen with Pass &amp; play, Play against the bot, Play online and How to play" width="720" height="1467" loading="lazy"></div><figcaption>Home</figcaption></figure>
+        <figure><div class="phone"><img class="screen" src="assets/screen-game.webp" alt="A game in progress" width="720" height="1467" loading="lazy"></div><figcaption>In play</figcaption></figure>
+        <figure><div class="phone"><img class="screen" src="assets/screen-bot.webp" alt="Choosing a bot" width="720" height="1467" loading="lazy"></div><figcaption>Pick a bot</figcaption></figure>
+        <figure><div class="phone"><img class="screen" src="assets/screen-online.webp" alt="Online rooms" width="720" height="1467" loading="lazy"></div><figcaption>Online rooms</figcaption></figure>
+        <figure><div class="phone"><img class="screen" src="assets/screen-learn.webp" alt="How to play walkthrough" width="720" height="1467" loading="lazy"></div><figcaption>How to play</figcaption></figure>
+        <figure><div class="phone"><img class="screen" src="assets/screen-end.webp" alt="End of a game" width="720" height="1467" loading="lazy"></div><figcaption>Game over</figcaption></figure>
+      </div>
+    </section>
+
+    <section class="install reveal" id="install" aria-labelledby="install-title">
+      <h2 id="install-title">Install in a minute</h2>
+      <p class="section-lede">Reversi isn't on the Play Store yet, so you install it straight from this page.</p>
+      <ol class="steps">
+        <li>
+          <span class="step-num">1</span>
+          <h3>Download</h3>
+          <p>Open this page on your Android phone and tap <strong>Download APK</strong>.</p>
+        </li>
+        <li>
+          <span class="step-num">2</span>
+          <h3>Allow and install</h3>
+          <p>Open the file. If asked, allow <strong>Install unknown apps</strong> for your browser, then tap <strong>Install</strong>. Play Protect may warn you — that happens for any app from outside the Play Store.</p>
+        </li>
+        <li>
+          <span class="step-num">3</span>
+          <h3>Play</h3>
+          <p>Open Reversi and pick a mode. Not sure of the rules? Tap <strong>How to play</strong> first.</p>
+        </li>
+      </ol>
+
+      <div class="checksum">
+        <div>
+          <p class="checksum-label">SHA-256 of the APK</p>
+          <code data-sha>2efedd608080c2d8ffa6de21309fac64754d09c96e91bb9011927b34a7364aec</code>
+        </div>
+        <button class="btn btn-ghost btn-small" type="button" data-copy>Copy</button>
+      </div>
+
+      <a class="btn btn-primary btn-wide" href="https://github.com/HLahoti/ReversiApp/releases/latest/download/Reversi.apk" data-download>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0-5-5m5 5 5-5M5 21h14"/></svg>
+        Download APK
+      </a>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>Made by Harsh Lahoti · <a href="https://github.com/HLahoti/ReversiApp">Source on GitHub</a> · <a href="https://github.com/HLahoti/ReversiApp/releases">All versions</a></p>
+  </footer>
+
+  <script src="main.js" defer></script>
+</body>
+</html>
