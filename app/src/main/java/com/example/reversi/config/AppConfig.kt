@@ -4,6 +4,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.reversi.bot.MoveSelection
+import com.example.reversi.bot.Opponent
 
 /**
  * All tunable parameters for the Reversi app live here. Change a value in
@@ -25,6 +27,39 @@ object AppConfig {
          * Higher = stronger + slower.
          */
         val SEARCH_DEPTH_OVERRIDE: Int? = null
+
+        /**
+         * Master switch for move variety. false = every bot always plays its
+         * single best move, so the same human moves get the same replies.
+         */
+        const val VARIETY_ENABLED: Boolean = true
+
+        /**
+         * Fixed RNG seed, for reproducing a bot's games while debugging.
+         * null = a fresh random sequence every time a bot is loaded.
+         */
+        val VARIETY_SEED: Long? = null
+
+        /**
+         * Per-opponent move variety (see [MoveSelection] for what each field
+         * does). Scores are tanh-scaled evaluations, but each model uses the
+         * range differently: in the opening, the gap between the best and
+         * second-best root move has a median of ~0.06–0.12 for the MLP bots
+         * and only ~0.02 for the CNN bots, hence the much smaller CNN values.
+         *  - margin: worst a varied pick may be vs. the best move.
+         *  - temperature: softmax spread; higher = closer to uniform.
+         *  - variedPlies / taperPlies: full variety for the first N plies
+         *    (discs placed), then fades to best-move play over the next M.
+         * Weaker bots get more variety, stronger bots less. An opponent missing
+         * from this map plays deterministically.
+         */
+        val VARIETY: Map<Opponent, MoveSelection> = mapOf(
+            Opponent.VISHY  to MoveSelection(margin = 0.30f, temperature = 0.10f,  variedPlies = 20, taperPlies = 12),
+            Opponent.GUK    to MoveSelection(margin = 0.20f, temperature = 0.07f,  variedPlies = 16, taperPlies = 10),
+            Opponent.ARJUN  to MoveSelection(margin = 0.15f, temperature = 0.05f,  variedPlies = 14, taperPlies = 8),
+            Opponent.PRAGG  to MoveSelection(margin = 0.05f, temperature = 0.02f,  variedPlies = 12, taperPlies = 8),
+            Opponent.KONERU to MoveSelection(margin = 0.04f, temperature = 0.015f, variedPlies = 10, taperPlies = 6),
+        )
 
         /** Floor on how long the "Thinking…" state stays visible, in ms. */
         const val THINKING_MIN_MS: Long = 150L

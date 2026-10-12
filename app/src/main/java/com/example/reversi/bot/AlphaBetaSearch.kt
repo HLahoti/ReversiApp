@@ -4,6 +4,7 @@ import com.example.reversi.game.Board
 import com.example.reversi.game.Cell
 import com.example.reversi.game.Move
 import com.example.reversi.game.Player
+import kotlin.random.Random
 
 /** Leaf evaluator — higher is better for `player`. */
 typealias Evaluator = (Board, Player) -> Float
@@ -11,21 +12,38 @@ typealias Evaluator = (Board, Player) -> Float
 /** Negamax α-β search.  Mirrors the C++ AlphaBetaSearch. */
 class AlphaBetaSearch(var depth: Int = 3) {
 
-    fun chooseMove(board: Board, player: Player, eval: Evaluator): Move {
+    /**
+     * With [MoveSelection.DETERMINISTIC] this is plain α-β and returns the
+     * first best move. Otherwise the root bound is lowered to
+     * `bestSoFar - margin`, so every move within the margin of the final best
+     * gets an exact score (anything below only gets an upper bound, which is
+     * enough to rule it out), and [MoveSelection.sample] picks among them.
+     */
+    fun chooseMove(
+        board: Board, player: Player, eval: Evaluator,
+        selection: MoveSelection = MoveSelection.DETERMINISTIC,
+        random: Random = Random.Default,
+    ): Move {
         val moves = board.legalMoves(player)
         if (moves.isEmpty()) return Move.PASS
 
+        val ply = board.count(Cell.BLACK) + board.count(Cell.WHITE) - 4
+        val margin = selection.marginAt(ply)
+        val temperature = selection.temperatureAt(ply)
+
+        val scores = FloatArray(moves.size)
         var best = moves.first()
         var bestScore = -INF
-        var alpha = -INF
         val beta = INF
-        for (m in moves) {
+        for ((i, m) in moves.withIndex()) {
+            val alpha = bestScore - margin
             val child = board.apply(m, player).first
             val score = -negamax(child, player.opponent(), depth - 1, -beta, -alpha, eval)
+            scores[i] = score
             if (score > bestScore) { bestScore = score; best = m }
-            if (score > alpha) alpha = score
         }
-        return best
+        if (margin <= 0f || temperature <= 0f) return best
+        return MoveSelection.sample(moves, scores, bestScore, margin, temperature, random)
     }
 
     private fun negamax(
