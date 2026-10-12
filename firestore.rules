@@ -1,0 +1,159 @@
+rules_version = '2';
+
+// Security rules for online play. Schema: app/src/main/java/com/example/reversi/net/firebase/FirestoreSchema.kt
+//
+// Every write the app makes is matched by exactly one narrow rule below; anything
+// else is denied. Kept compatible with the v1.2 client (zero-padded move doc ids,
+// fields written as in FirebaseOnlineClient / FirebaseOnlineSession).
+// Tests: firestore-tests/ (run with `npm test` there; needs Java for the emulator).
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    function authed() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    function roomPath(code) { return /databases/$(db)/documents/rooms/$(code); }
+    function isHost(r) { return uid() == r.hostUid; }
+    function isMember(r) { return authed() && (uid() == r.hostUid || uid() == r.guestUid); }
+    function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+
+    // Room codes: RoomCodes.ALPHABET, 6 characters.
+    function validCode(code) { return code.matches('^[A-HJKMNP-Z2-9]{6}$'); }
+    function validColor(c) { return c == 'BLACK' || c == 'WHITE'; }
+    function validName(n) { return n == null || (n is string && n.size() <= 24); }
+    // The client writes now + 24 h. No TTL policy runs on it today (rooms are
+    // cleaned up by the clients), but keep it bounded in case one is enabled:
+    // slack for skewed device clocks, never a far-future value.
+    function validTtl(d) {
+      return d.expiresAt is timestamp && d.expiresAt < request.time + duration.value(7, 'd');
+    }
+
+    // Move doc id, matching FS.moveDocId: "%03d-%06d".format(round, seq).
+    function pad(n, width) {
+      let s = '000000' + string(n);
+      return s[s.size() - width:s.size()];
+    }
+    function moveId(round, seq) { return pad(round, 3) + '-' + pad(seq, 6); }
+
+    // A game is at most 60 placements plus passes; well under this.
+    function maxSeq() { return 200; }
+
+    function myFlag(r) { return isHost(r) ? 'rematchHost' : 'rematchGuest'; }
+    function otherFlag(r) { return isHost(r) ? 'rematchGuest' : 'rematchHost'; }
+
+    function roomKeys() {
+      return ['status', 'createdAt', 'hostUid', 'hostColor', 'hostName', 'guestUid',
+              'guestName', 'moveCount', 'round', 'rematchHost', 'rematchGuest', 'expiresAt'];
+    }
+
+    function validNewRoom(code, d) {
+      return authed()
+        && validCode(code)
+        && d.keys().hasOnly(roomKeys()) && d.keys().hasAll(roomKeys())
+        && d.status == 'waiting'
+        && d.createdAt == request.time
+        && d.hostUid == uid()
+        && validColor(d.hostColor)
+        && validName(d.hostName)
+        && d.guestUid == null && d.guestName == null
+        && d.moveCount == 0 && d.round == 0
+        && d.rematchHost == false && d.rematchGuest == false
+        && validTtl(d);
+    }
+
+    // A second player takes the empty guest seat. Nothing else may change.
+    function isJoin(r, n) {
+      return authed()
+        && r.status == 'waiting' && r.guestUid == null
+        && uid() != r.hostUid
+        && changed().hasOnly(['guestUid', 'guestName', 'status', 'expiresAt'])
+        && n.guestUid == uid()
+        && n.status == 'active'
+        && validName(n.guestName);
+    }
+
+    // The seated guest re-runs joinRoom (e.g. re-entering the code).
+    function isRejoin(r, n) {
+      return authed()
+        && r.status == 'active' && r.guestUid == uid()
+        && changed().hasOnly(['guestName', 'expiresAt'])
+        && validName(n.guestName);
+    }
+
+    // Half of sendMove's batch: moveCount advances by one, and only together
+    // with the move doc for that seq.
+    function isMoveBump(code, r, n) {
+      return isMember(r) && r.status == 'active'
+        && changed().hasOnly(['moveCount', 'expiresAt'])
+        && n.moveCount == r.moveCount + 1
+        && existsAfter(/databases/$(db)/documents/rooms/$(code)/moves/$(moveId(r.round, n.moveCount)));
+    }
+
+    // A player raises their own "Play again" flag.
+    function isRematchRequest(r, n) {
+      return isMember(r) && r.status == 'active'
+        && changed().hasOnly([myFlag(r), 'expiresAt'])
+        && n[myFlag(r)] == true;
+    }
+
+    // The second "Play again" starts the next round: colours swap, flags and
+    // move count reset. Only allowed once the other player has asked.
+    function isRematchStart(r, n) {
+      return isMember(r) && r.status == 'active'
+        && r[otherFlag(r)] == true
+        && changed().hasOnly(['round', 'hostColor', 'rematchHost', 'rematchGuest', 'moveCount', 'expiresAt'])
+        && n.round == r.round + 1 && n.round < 1000
+        && validColor(n.hostColor) && n.hostColor != r.hostColor
+        && n.moveCount == 0
+        && n.rematchHost == false && n.rematchGuest == false;
+    }
+
+    function moveKeys() { return ['round', 'seq', 'by', 'x', 'y', 'isPass', 'ts', 'expiresAt']; }
+
+    // The other half of sendMove's batch. `r` is the room before the batch,
+    // `a` the room after it.
+    function validNewMove(id, r, a, m) {
+      return isMember(r) && r.status == 'active'
+        && m.keys().hasOnly(moveKeys()) && m.keys().hasAll(moveKeys())
+        && m.round == r.round
+        && m.seq == r.moveCount + 1 && m.seq <= maxSeq()
+        && a.round == r.round && a.moveCount == m.seq
+        && id == moveId(m.round, m.seq)
+        // You can only ever move as your own colour.
+        && validColor(m.by) && (isHost(r) == (m.by == r.hostColor))
+        && m.isPass is bool
+        && (m.isPass
+              ? (m.x == -1 && m.y == -1)
+              : (m.x is int && m.x >= 0 && m.x < 8 && m.y is int && m.y >= 0 && m.y < 8))
+        && m.ts == request.time
+        && validTtl(m);
+    }
+
+    match /rooms/{code} {
+      // Fetching one room by its code is how joining works; listing is never
+      // allowed, so codes can't be enumerated.
+      allow get: if authed();
+      allow list: if false;
+
+      allow create: if validNewRoom(code, request.resource.data);
+
+      allow update: if validTtl(request.resource.data) && (
+        isJoin(resource.data, request.resource.data)
+        || isRejoin(resource.data, request.resource.data)
+        || isMoveBump(code, resource.data, request.resource.data)
+        || isRematchRequest(resource.data, request.resource.data)
+        || isRematchStart(resource.data, request.resource.data)
+      );
+
+      allow delete: if isMember(resource.data);
+
+      match /moves/{id} {
+        allow read: if isMember(get(roomPath(code)).data);
+        allow create: if validNewMove(
+          id, get(roomPath(code)).data, getAfter(roomPath(code)).data, request.resource.data);
+        // Moves are immutable; only the seated players may clean them up.
+        allow update: if false;
+        allow delete: if isMember(get(roomPath(code)).data);
+      }
+    }
+  }
+}

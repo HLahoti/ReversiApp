@@ -8,37 +8,9 @@ package com.example.reversi.net.firebase
  *   3. In the console, enable:
  *          Authentication → Sign-in method → Anonymous
  *          Firestore Database → create in production mode
- *   4. Paste these starter Firestore security rules (friends-only; tightens
- *      writes to the two seated players and relies on client turn logic):
- *
- *          rules_version = '2';
- *          service cloud.firestore {
- *            match /databases/{db}/documents {
- *              match /rooms/{code} {
- *                allow read: if request.auth != null;
- *                allow create: if request.auth != null
- *                              && request.resource.data.hostUid == request.auth.uid
- *                              && request.resource.data.status == 'waiting';
- *                allow update: if request.auth != null
- *                              && (resource.data.hostUid == request.auth.uid
- *                                  || resource.data.guestUid == request.auth.uid
- *                                  || (resource.data.status == 'waiting'
- *                                      && request.resource.data.guestUid == request.auth.uid));
- *                allow delete: if request.auth != null
- *                              && (resource.data.hostUid == request.auth.uid
- *                                  || resource.data.guestUid == request.auth.uid);
- *                match /moves/{seq} {
- *                  allow read: if request.auth != null;
- *                  allow create: if request.auth != null
- *                                && (get(/databases/$(db)/documents/rooms/$(code)).data.hostUid == request.auth.uid
- *                                    || get(/databases/$(db)/documents/rooms/$(code)).data.guestUid == request.auth.uid);
- *                  allow delete: if request.auth != null
- *                                && (get(/databases/$(db)/documents/rooms/$(code)).data.hostUid == request.auth.uid
- *                                    || get(/databases/$(db)/documents/rooms/$(code)).data.guestUid == request.auth.uid);
- *                }
- *              }
- *            }
- *          }
+ *   4. Deploy the security rules from the repo root (firestore.rules):
+ *          firebase deploy --only firestore:rules
+ *      Tests for them live in firestore-tests/ (`npm test` there).
  */
 
 import android.content.Context
@@ -52,6 +24,7 @@ import com.example.reversi.net.RoomCode
 import com.example.reversi.net.RoomCodes
 import com.example.reversi.net.RoomTracker
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlin.random.Random
@@ -209,13 +182,8 @@ class FirebaseOnlineClient(
         } catch (_: Throwable) {
             emptyList()
         }
-        if (moves.isNotEmpty()) {
-            try {
-                db.runBatch { batch -> moves.forEach { batch.delete(it.reference) } }.await()
-            } catch (_: Throwable) {
-                // Fall through; attempt room delete anyway.
-            }
-        }
+        // Fall through on failure; attempt room delete anyway.
+        runCatching { db.deleteAll(moves) }
         runCatching { roomDoc.delete().await() }
     }
 
@@ -231,6 +199,16 @@ class FirebaseOnlineClient(
             if (!exists) return code
         }
         throw OnlineError.Backend("Could not allocate a free room code after 8 tries.")
+    }
+}
+
+/** Firestore's cap on writes in one batch. */
+private const val MAX_BATCH_WRITES = 500
+
+/** Batch-delete [docs], split to stay under Firestore's per-batch write limit. */
+internal suspend fun FirebaseFirestore.deleteAll(docs: List<DocumentSnapshot>) {
+    for (chunk in docs.chunked(MAX_BATCH_WRITES)) {
+        runBatch { batch -> chunk.forEach { batch.delete(it.reference) } }.await()
     }
 }
 

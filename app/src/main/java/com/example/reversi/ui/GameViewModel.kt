@@ -135,6 +135,11 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private var onlineRound = 0
     /** "Play again" was pressed and the request hasn't shown up in a snapshot yet. */
     private var rematchPending = false
+    /**
+     * Set when the room's move list stops matching the local game (an illegal
+     * or out-of-turn move arrived). No further remote moves are applied.
+     */
+    private var desyncError: String? = null
 
     fun configure(players: Players, opponent: Opponent? = null) {
         _players.value = players
@@ -185,6 +190,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         this.localColor = localColor
         onlineRound = session.state.value.round
         rematchPending = false
+        desyncError = null
         _players.value = Players(
             black = if (localColor == Player.BLACK) Participant.HUMAN else Participant.REMOTE,
             white = if (localColor == Player.WHITE) Participant.HUMAN else Participant.REMOTE,
@@ -287,6 +293,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             // Both players asked for a rematch: start the new round's board.
             onlineRound = snapshot.round
             rematchPending = false
+            desyncError = null
             snapshot.myColor?.let { color ->
                 localColor = color
                 _players.value = Players(
@@ -301,17 +308,25 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         _online.value = OnlineUiState(
             status = snapshot.status,
             opponentName = snapshot.opponent?.displayName,
-            error = snapshot.error,
+            error = snapshot.error ?: desyncError,
             rematchRequested = snapshot.rematchRequestedByMe || rematchPending,
             opponentWantsRematch = snapshot.rematchRequestedByOpponent,
         )
         // Apply any moves we haven't seen yet, in order.
-        if (snapshot.moves.size > moves.size) {
+        if (desyncError == null && snapshot.moves.size > moves.size) {
             for (i in moves.size until snapshot.moves.size) {
                 val rm = snapshot.moves[i]
                 val expectedSeq = i + 1
                 if (rm.seq != expectedSeq) {
                     // Out-of-order write; the next snapshot should repair it.
+                    return
+                }
+                val cur = _state.value
+                if (rm.by != cur.toMove || cur.play(rm.toMove()) == null) {
+                    // The room no longer matches this board. Stop here rather
+                    // than apply later moves on top of the wrong position.
+                    desyncError = "This game is out of sync with the room. Leave and start a new one."
+                    _online.update { it?.copy(error = desyncError) }
                     return
                 }
                 applyMove(rm.toMove(), broadcast = false)

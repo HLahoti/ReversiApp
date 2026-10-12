@@ -162,9 +162,7 @@ internal class FirebaseOnlineSession(
             runCatching {
                 val stale = movesCol.get().await().documents
                     .filter { (it.getLong(FS.F_ROUND)?.toInt() ?: 0) < startedRound }
-                if (stale.isNotEmpty()) {
-                    db.runBatch { batch -> stale.forEach { batch.delete(it.reference) } }.await()
-                }
+                db.deleteAll(stale)
             }
         }
     }
@@ -174,11 +172,7 @@ internal class FirebaseOnlineSession(
         // a "doc no longer exists" ABANDONED snapshot into the UI.
         close()
         val moves = runCatching { movesCol.get().await().documents }.getOrDefault(emptyList())
-        if (moves.isNotEmpty()) {
-            runCatching {
-                db.runBatch { batch -> moves.forEach { batch.delete(it.reference) } }.await()
-            }
-        }
+        runCatching { db.deleteAll(moves) }
         runCatching { roomDoc.delete().await() }
         // Drop the tracker entry regardless — a failed delete here is almost
         // always because the other player already cleaned up.

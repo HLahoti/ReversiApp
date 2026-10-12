@@ -1,6 +1,8 @@
 package com.example.reversi.net
 
+import java.security.SecureRandom
 import kotlin.random.Random
+import kotlin.random.asKotlinRandom
 
 /**
  * Short, human-friendly room identifiers. Six characters picked from an
@@ -12,7 +14,10 @@ object RoomCodes {
     private const val ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
     const val LENGTH = 6
 
-    fun generate(random: Random = Random.Default): RoomCode {
+    /** Codes are the only thing keeping a room private, so draw them from a CSPRNG. */
+    private val secureRandom: Random = SecureRandom().asKotlinRandom()
+
+    fun generate(random: Random = secureRandom): RoomCode {
         val chars = CharArray(LENGTH) { ALPHABET[random.nextInt(ALPHABET.length)] }
         return RoomCode(String(chars))
     }

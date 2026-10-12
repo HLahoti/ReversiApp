@@ -1,0 +1,16 @@
+{
+  "name": "reversi-room-cleanup",
+  "private": true,
+  "type": "module",
+  "bin": "cleanup.js",
+  "scripts": {
+    "cleanup": "node cleanup.js",
+    "test": "firebase emulators:exec --only firestore --project demo-reversi \"mocha --timeout 20000 cleanup.test.js\""
+  },
+  "dependencies": {
+    "firebase-admin": "14.4.0"
+  },
+  "devDependencies": {
+    "mocha": "11.8.0"
+  }
+}

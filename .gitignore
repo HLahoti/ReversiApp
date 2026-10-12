@@ -35,3 +35,12 @@ keystore.properties
 
 # Capture dumps
 /captures/
+
+# Firestore rules tests
+firestore-tests/node_modules/
+firebase-debug.log
+firestore-debug.log
+
+# Room cleanup: service-account keys never get committed
+tools/room-cleanup/node_modules/
+*service-account*.json
