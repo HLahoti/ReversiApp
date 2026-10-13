@@ -121,22 +121,26 @@ class MainActivity : ComponentActivity() {
                         val resume = entry.arguments?.getBoolean("resume") == true
                         val vm: GameViewModel = viewModel()
                         val ctx = LocalContext.current
+                        val opponent = Opponent.fromSaved(opponentArg) ?: Opponent.DEFAULT
+                        // Read once, outside the effect, so the title shows the
+                        // colour the resumed game was saved with.
+                        val saved = remember(resume, opponent) {
+                            if (resume) GameStore(ctx.applicationContext)
+                                .load(SavedMode.VS_BOT, opponent) else null
+                        }
+                        val human = Player.valueOf(saved?.humanColor ?: humanArg)
                         LaunchedEffect(Unit) {
-                            val saved = if (resume) GameStore(ctx.applicationContext)
-                                .load(SavedMode.VS_BOT) else null
-                            val human = Player.valueOf(saved?.humanColor ?: humanArg)
-                            val opponent = Opponent.fromSaved(opponentArg) ?: Opponent.DEFAULT
                             val players = Players(
                                 black = if (human == Player.BLACK) Participant.HUMAN else Participant.BOT,
                                 white = if (human == Player.WHITE) Participant.HUMAN else Participant.BOT,
                             )
-                            if (saved != null) vm.resume(saved, players)
+                            if (saved != null) vm.resume(saved, players, opponent)
                             else vm.configure(players, opponent)
                         }
-                        val humanName = Player.valueOf(humanArg).name.lowercase()
+                        val humanName = human.name.lowercase()
                         GameScreen(
                             vm,
-                            title = "vs Bot · you are $humanName",
+                            title = "vs ${opponent.displayName} · you are $humanName",
                             onBack = { nav.popBackStack() },
                         )
                     }

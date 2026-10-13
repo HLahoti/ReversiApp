@@ -146,7 +146,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         mode = modeFor(players)
         setOpponent(opponent)
         resetInternal()
-        mode?.let(store::clear)
+        mode?.let { store.clear(it, slotOpponent()) }
         playOpening()
     }
 
@@ -154,11 +154,13 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
      * Replay [saved] into the state. The caller is responsible for picking
      * `players` consistent with the save (two-human for a two-player save,
      * one-bot with [SavedGame.humanColor] as the human for a vs-bot save).
+     * [opponent] is the slot the save was loaded from; it falls back to the
+     * one recorded in the save.
      */
-    fun resume(saved: SavedGame, players: Players) {
+    fun resume(saved: SavedGame, players: Players, opponent: Opponent? = null) {
         _players.value = players
         mode = modeFor(players)
-        setOpponent(Opponent.fromSaved(saved.difficulty))
+        setOpponent(opponent ?: Opponent.fromSaved(saved.difficulty))
         resetInternal()
         var s = GameState()
         val entries = mutableListOf<MoveLogEntry>()
@@ -334,6 +336,9 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** The bot this game is played against, which also picks its save slot. */
+    private fun slotOpponent(): Opponent = opponent ?: Opponent.DEFAULT
+
     private fun setOpponent(o: Opponent?) {
         if (o != opponent) {
             opponent = o
@@ -376,7 +381,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         }
         botJob?.cancel()
         resetInternal()
-        mode?.let(store::clear)
+        mode?.let { store.clear(it, slotOpponent()) }
         playOpening()
     }
 
@@ -389,7 +394,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         if (isOnline) return
         val m = mode ?: return
         if (moves.isEmpty() || _state.value.isTerminal) {
-            store.clear(m)
+            store.clear(m, slotOpponent())
             return
         }
         val saved = moves.map { SavedMove(it.x, it.y, it.isPass) }
@@ -397,7 +402,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             SavedMode.TWO_PLAYER -> store.writeTwoPlayer(saved)
             SavedMode.VS_BOT -> {
                 val human = humanColorIn(_players.value) ?: return
-                store.writeVsBot(saved, human, opponent)
+                store.writeVsBot(saved, human, slotOpponent())
             }
         }
     }
@@ -572,7 +577,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         }
         if (_players.value.of(cur.toMove) != Participant.BOT) return
         _botThinking.value = true
-        val o = opponent ?: Opponent.DEFAULT
+        val o = slotOpponent()
         botJob = viewModelScope.launch {
             val chosen = withContext(Dispatchers.Default) {
                 val b = bot ?: Bot.load(getApplication(), o).also { bot = it }

@@ -16,6 +16,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -70,13 +76,14 @@ fun HomeScreen(
     // Re-check save existence whenever this screen comes to the foreground
     // (back from a game, app resume) so Resume/New buttons stay in sync.
     var hasTwoPlayer by remember { mutableStateOf(store.has(SavedMode.TWO_PLAYER)) }
-    var hasVsBot by remember { mutableStateOf(store.has(SavedMode.VS_BOT)) }
+    var savedBots by remember { mutableStateOf(store.opponentsWithSaves()) }
+    val hasVsBot = opponent in savedBots
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val obs = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 hasTwoPlayer = store.has(SavedMode.TWO_PLAYER)
-                hasVsBot = store.has(SavedMode.VS_BOT)
+                savedBots = store.opponentsWithSaves()
             }
         }
         lifecycleOwner.lifecycle.addObserver(obs)
@@ -164,7 +171,7 @@ fun HomeScreen(
                         fontSize = 13.sp,
                     )
                     Spacer(Modifier.height(6.dp))
-                    OpponentChips(opponent) { haptics.tap(); opponent = it }
+                    OpponentChips(opponent, savedBots) { haptics.tap(); opponent = it }
                     Spacer(Modifier.height(14.dp))
                     if (hasVsBot) {
                         PrimaryButton(
@@ -200,7 +207,7 @@ fun HomeScreen(
                         SavedMode.TWO_PLAYER ->
                             "Your paused 2-player game will be discarded. This can't be undone."
                         SavedMode.VS_BOT ->
-                            "Your paused game against the bot will be discarded. This can't be undone."
+                            "Your paused game against ${opponent.displayName} will be discarded. This can't be undone."
                     }
                 )
             },
@@ -381,25 +388,47 @@ private fun SecondaryButton(text: String, onClick: () -> Unit, modifier: Modifie
 /** The bot roster, in [Opponent] declaration order (weakest first), wrapping as needed. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun OpponentChips(selected: Opponent, onSelect: (Opponent) -> Unit) {
+private fun OpponentChips(
+    selected: Opponent,
+    withSaves: Set<Opponent>,
+    onSelect: (Opponent) -> Unit,
+) {
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         verticalArrangement = Arrangement.spacedBy(4.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Opponent.entries.forEach { o ->
-            ColorChip(o.displayName, selected == o) { onSelect(o) }
+            ColorChip(o.displayName, selected == o, hasSave = o in withSaves) { onSelect(o) }
         }
     }
 }
 
+/** [hasSave] adds a dot after the label, marking a bot with a paused game. */
 @Composable
-private fun ColorChip(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun ColorChip(
+    label: String,
+    selected: Boolean,
+    hasSave: Boolean = false,
+    onClick: () -> Unit,
+) {
     val bg = if (selected) Felt.Highlight.copy(alpha = 0.9f) else AppConfig.Palette.Glass
     val fg = if (selected) Felt.Deep else Felt.OnDark
     Button(
         onClick = onClick,
         shape = RoundedCornerShape(999.dp),
         colors = ButtonDefaults.buttonColors(containerColor = bg, contentColor = fg),
-    ) { Text(label, fontSize = 14.sp) }
+    ) {
+        Text(label, fontSize = 14.sp)
+        if (hasSave) {
+            Spacer(Modifier.width(6.dp))
+            Box(
+                Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(if (selected) Felt.Deep else Felt.Highlight)
+                    .semantics { contentDescription = "has a paused game" },
+            )
+        }
+    }
 }

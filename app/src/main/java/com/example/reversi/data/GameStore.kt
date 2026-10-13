@@ -30,20 +30,56 @@ data class SavedGame(
 enum class SavedMode { TWO_PLAYER, VS_BOT }
 
 /**
- * File-backed store for the two per-mode game saves. Writes are overwrites;
- * clears delete the file so [has] reports false. Corrupt files are deleted
- * on read and treated as "no save".
+ * File-backed store for game saves: one two-player slot plus one vs-bot slot
+ * per [Opponent], so pausing a game against one bot never overwrites a game
+ * against another. Vs-bot calls take the opponent; it is ignored for
+ * [SavedMode.TWO_PLAYER]. Writes are overwrites; clears delete the file so
+ * [has] reports false. Corrupt files are deleted on read and treated as "no
+ * save".
  */
-class GameStore(context: Context) {
-    private val dir = File(context.filesDir, "saves").apply { mkdirs() }
+class GameStore(private val dir: File) {
+    constructor(context: Context) : this(File(context.filesDir, "saves"))
+
     private val twoPlayerFile = File(dir, "two_player.json")
-    private val vsBotFile = File(dir, "vs_bot.json")
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
-    fun has(mode: SavedMode): Boolean = fileFor(mode).exists()
+    init {
+        dir.mkdirs()
+        migrateSharedVsBotSave()
+    }
 
-    fun load(mode: SavedMode): SavedGame? {
-        val f = fileFor(mode)
+    fun has(mode: SavedMode, opponent: Opponent? = null): Boolean = fileFor(mode, opponent).exists()
+
+    /** Opponents that currently have a paused game. */
+    fun opponentsWithSaves(): Set<Opponent> =
+        Opponent.entries.filterTo(mutableSetOf()) { vsBotFile(it).exists() }
+
+    fun load(mode: SavedMode, opponent: Opponent? = null): SavedGame? = read(fileFor(mode, opponent))
+
+    fun writeTwoPlayer(moves: List<SavedMove>) {
+        twoPlayerFile.writeText(
+            json.encodeToString(SavedGame.serializer(), SavedGame(humanColor = null, moves = moves))
+        )
+    }
+
+    fun writeVsBot(moves: List<SavedMove>, humanColor: Player, opponent: Opponent) {
+        vsBotFile(opponent).writeText(
+            json.encodeToString(
+                SavedGame.serializer(),
+                SavedGame(
+                    humanColor = humanColor.name,
+                    difficulty = opponent.name,
+                    moves = moves,
+                ),
+            )
+        )
+    }
+
+    fun clear(mode: SavedMode, opponent: Opponent? = null) {
+        fileFor(mode, opponent).delete()
+    }
+
+    private fun read(f: File): SavedGame? {
         if (!f.exists()) return null
         return try {
             json.decodeFromString(SavedGame.serializer(), f.readText())
@@ -53,31 +89,25 @@ class GameStore(context: Context) {
         }
     }
 
-    fun writeTwoPlayer(moves: List<SavedMove>) {
-        twoPlayerFile.writeText(
-            json.encodeToString(SavedGame.serializer(), SavedGame(humanColor = null, moves = moves))
-        )
-    }
-
-    fun writeVsBot(moves: List<SavedMove>, humanColor: Player, opponent: Opponent?) {
-        vsBotFile.writeText(
-            json.encodeToString(
-                SavedGame.serializer(),
-                SavedGame(
-                    humanColor = humanColor.name,
-                    difficulty = opponent?.name,
-                    moves = moves,
-                ),
-            )
-        )
-    }
-
-    fun clear(mode: SavedMode) {
-        fileFor(mode).delete()
-    }
-
-    private fun fileFor(mode: SavedMode): File = when (mode) {
+    private fun fileFor(mode: SavedMode, opponent: Opponent?): File = when (mode) {
         SavedMode.TWO_PLAYER -> twoPlayerFile
-        SavedMode.VS_BOT -> vsBotFile
+        SavedMode.VS_BOT -> vsBotFile(requireNotNull(opponent) { "vs-bot save needs an opponent" })
+    }
+
+    /** Keyed by the enum name, which is already persisted and kept stable. */
+    private fun vsBotFile(o: Opponent): File = File(dir, "vs_bot_${o.name.lowercase()}.json")
+
+    /**
+     * Before per-bot slots, every vs-bot game shared `vs_bot.json`. Move it
+     * into the slot of the bot it was played against (the default bot for
+     * saves older than the picker) unless that slot is already taken.
+     */
+    private fun migrateSharedVsBotSave() {
+        val legacy = File(dir, "vs_bot.json")
+        if (!legacy.exists()) return
+        val saved = read(legacy) ?: return
+        val target = vsBotFile(Opponent.fromSaved(saved.difficulty) ?: Opponent.DEFAULT)
+        if (!target.exists()) legacy.renameTo(target)
+        legacy.delete()
     }
 }
