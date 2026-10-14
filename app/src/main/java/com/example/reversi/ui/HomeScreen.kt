@@ -49,6 +49,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -171,7 +172,33 @@ fun HomeScreen(
                         fontSize = 13.sp,
                     )
                     Spacer(Modifier.height(6.dp))
-                    OpponentChips(opponent, savedBots) { haptics.tap(); opponent = it }
+                    OpponentChips(
+                        Opponent.entries.filter { it.learning == null },
+                        opponent,
+                        savedBots,
+                    ) { haptics.tap(); opponent = it }
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "Learns as you play",
+                        color = Felt.OnDark.copy(alpha = 0.7f),
+                        fontSize = 13.sp,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    OpponentChips(
+                        Opponent.entries.filter { it.learning != null },
+                        opponent,
+                        savedBots,
+                    ) { haptics.tap(); opponent = it }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Starts just below Pragg and studies every game you finish against it. " +
+                            "It never loses the same way twice, so it grows with you.",
+                        color = Felt.OnDark.copy(alpha = 0.6f),
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                    )
                     Spacer(Modifier.height(14.dp))
                     if (hasVsBot) {
                         PrimaryButton(
@@ -385,10 +412,11 @@ private fun SecondaryButton(text: String, onClick: () -> Unit, modifier: Modifie
     }
 }
 
-/** The bot roster, in [Opponent] declaration order (weakest first), wrapping as needed. */
+/** A row of bot chips, in the order given (weakest first), wrapping as needed. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun OpponentChips(
+    opponents: List<Opponent>,
     selected: Opponent,
     withSaves: Set<Opponent>,
     onSelect: (Opponent) -> Unit,
@@ -398,7 +426,7 @@ private fun OpponentChips(
         verticalArrangement = Arrangement.spacedBy(4.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Opponent.entries.forEach { o ->
+        opponents.forEach { o ->
             ColorChip(o.displayName, selected == o, hasSave = o in withSaves) { onSelect(o) }
         }
     }

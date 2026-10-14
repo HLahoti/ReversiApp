@@ -15,7 +15,8 @@ import com.example.reversi.bot.learning.Learning
  *
  * An opponent with [learning] improves as it plays: it starts at its bundled
  * model's strength and builds on that from every finished game (see [Bots]).
- * It is listed by its starting strength.
+ * It is declared by its starting strength, but the home screen gives
+ * learning opponents their own row.
  */
 enum class Opponent(
     val assetPath: String,
