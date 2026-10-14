@@ -1,6 +1,19 @@
 package com.example.reversi.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -100,127 +113,152 @@ fun HomeScreen(
     // Which mode's "New game" has a confirm dialog pending.
     var confirmDiscard by remember { mutableStateOf<SavedMode?>(null) }
 
-    BackdropBackground {
-        Column(
-            Modifier
-                .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(24.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            SpinningPiece(target = choice, size = 160.dp)
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = "Reversi",
-                color = Felt.OnDark,
-                fontSize = 56.sp,
-                fontWeight = FontWeight.Light,
-            )
-            Spacer(Modifier.height(44.dp))
+    // Scrollable so the bot options' Start button stays reachable on short
+    // screens. fillMaxSize before verticalScroll keeps the viewport height as
+    // the minimum, so content still centres when it fits.
+    val scroll = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    // Opening a mode's options (or picking a bot that swaps Start for
+    // Resume/New game) jumps to the bottom so the buttons are in view; going
+    // back returns to the top.
+    LaunchedEffect(step, hasVsBot) {
+        if (step == null) {
+            scroll.animateScrollTo(0)
+        } else {
+            withFrameNanos { } // let the new panel lay out so maxValue is current
+            scroll.animateScrollTo(scroll.maxValue)
+        }
+    }
 
-            when (step) {
-                null -> ModePicker(
-                    onPickTwoPlayer = { haptics.tap(); step = SavedMode.TWO_PLAYER },
-                    onPickVsBot = { haptics.tap(); step = SavedMode.VS_BOT },
-                    onPickOnline = { haptics.confirm(); onStartOnline() },
-                    onHowToPlay = { haptics.tap(); onHowToPlay() },
+    BackdropBackground {
+        Box(Modifier.fillMaxSize()) {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scroll)
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                SpinningPiece(target = choice, size = 160.dp)
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = "Reversi",
+                    color = Felt.OnDark,
+                    fontSize = 56.sp,
+                    fontWeight = FontWeight.Light,
                 )
-                SavedMode.TWO_PLAYER -> OptionsPanel(
-                    title = "Pass & play",
-                    onBack = { haptics.tap(); step = null },
-                ) {
-                    if (hasTwoPlayer) {
-                        PrimaryButton(
-                            text = "Resume game",
-                            onClick = { haptics.confirm(); onStartTwoPlayer(true) },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        SecondaryButton(
-                            text = "New game",
-                            onClick = { haptics.tap(); confirmDiscard = SavedMode.TWO_PLAYER },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    } else {
-                        PrimaryButton(
-                            text = "Start game",
-                            onClick = { haptics.confirm(); onStartTwoPlayer(false) },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                }
-                SavedMode.VS_BOT -> OptionsPanel(
-                    title = "Play against the bot",
-                    onBack = { haptics.tap(); step = null },
-                ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ColorChip("Black", choice == HumanColorChoice.BLACK) {
-                            haptics.tap(); choice = HumanColorChoice.BLACK
-                        }
-                        ColorChip("White", choice == HumanColorChoice.WHITE) {
-                            haptics.tap(); choice = HumanColorChoice.WHITE
-                        }
-                        ColorChip("Random", choice == HumanColorChoice.RANDOM) {
-                            haptics.tap(); choice = HumanColorChoice.RANDOM
+                Spacer(Modifier.height(44.dp))
+
+                when (step) {
+                    null -> ModePicker(
+                        onPickTwoPlayer = { haptics.tap(); step = SavedMode.TWO_PLAYER },
+                        onPickVsBot = { haptics.tap(); step = SavedMode.VS_BOT },
+                        onPickOnline = { haptics.confirm(); onStartOnline() },
+                        onHowToPlay = { haptics.tap(); onHowToPlay() },
+                    )
+                    SavedMode.TWO_PLAYER -> OptionsPanel(
+                        title = "Pass & play",
+                        onBack = { haptics.tap(); step = null },
+                    ) {
+                        if (hasTwoPlayer) {
+                            PrimaryButton(
+                                text = "Resume game",
+                                onClick = { haptics.confirm(); onStartTwoPlayer(true) },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            SecondaryButton(
+                                text = "New game",
+                                onClick = { haptics.tap(); confirmDiscard = SavedMode.TWO_PLAYER },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        } else {
+                            PrimaryButton(
+                                text = "Start game",
+                                onClick = { haptics.confirm(); onStartTwoPlayer(false) },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
                         }
                     }
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        "Opponent · weakest → strongest",
-                        color = Felt.OnDark.copy(alpha = 0.7f),
-                        fontSize = 13.sp,
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    OpponentChips(
-                        Opponent.entries.filter { it.learning == null },
-                        opponent,
-                        savedBots,
-                    ) { haptics.tap(); opponent = it }
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        "Learns as you play",
-                        color = Felt.OnDark.copy(alpha = 0.7f),
-                        fontSize = 13.sp,
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    OpponentChips(
-                        Opponent.entries.filter { it.learning != null },
-                        opponent,
-                        savedBots,
-                    ) { haptics.tap(); opponent = it }
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "Starts just below Pragg and studies every game you finish against it. " +
-                            "It never loses the same way twice, so it grows with you.",
-                        color = Felt.OnDark.copy(alpha = 0.6f),
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 8.dp),
-                    )
-                    Spacer(Modifier.height(14.dp))
-                    if (hasVsBot) {
-                        PrimaryButton(
-                            text = "Resume game",
-                            onClick = { haptics.confirm(); onStartVsBot(choice, opponent, true) },
-                            modifier = Modifier.fillMaxWidth(),
+                    SavedMode.VS_BOT -> OptionsPanel(
+                        title = "Play against the bot",
+                        onBack = { haptics.tap(); step = null },
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ColorChip("Black", choice == HumanColorChoice.BLACK) {
+                                haptics.tap(); choice = HumanColorChoice.BLACK
+                            }
+                            ColorChip("White", choice == HumanColorChoice.WHITE) {
+                                haptics.tap(); choice = HumanColorChoice.WHITE
+                            }
+                            ColorChip("Random", choice == HumanColorChoice.RANDOM) {
+                                haptics.tap(); choice = HumanColorChoice.RANDOM
+                            }
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            "Opponent · weakest → strongest",
+                            color = Felt.OnDark.copy(alpha = 0.7f),
+                            fontSize = 13.sp,
                         )
-                        Spacer(Modifier.height(8.dp))
-                        SecondaryButton(
-                            text = "New game",
-                            onClick = { haptics.tap(); confirmDiscard = SavedMode.VS_BOT },
-                            modifier = Modifier.fillMaxWidth(),
+                        Spacer(Modifier.height(6.dp))
+                        OpponentChips(
+                            Opponent.entries.filter { it.learning == null },
+                            opponent,
+                            savedBots,
+                        ) { haptics.tap(); opponent = it }
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            "Learns as you play",
+                            color = Felt.OnDark.copy(alpha = 0.7f),
+                            fontSize = 13.sp,
                         )
-                    } else {
-                        PrimaryButton(
-                            text = "Start",
-                            onClick = { haptics.confirm(); onStartVsBot(choice, opponent, false) },
-                            modifier = Modifier.fillMaxWidth(),
+                        Spacer(Modifier.height(6.dp))
+                        OpponentChips(
+                            Opponent.entries.filter { it.learning != null },
+                            opponent,
+                            savedBots,
+                        ) { haptics.tap(); opponent = it }
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Starts just below Pragg and studies every game you finish against it. " +
+                                "It never loses the same way twice, so it grows with you.",
+                            color = Felt.OnDark.copy(alpha = 0.6f),
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 8.dp),
                         )
+                        Spacer(Modifier.height(14.dp))
+                        if (hasVsBot) {
+                            PrimaryButton(
+                                text = "Resume game",
+                                onClick = { haptics.confirm(); onStartVsBot(choice, opponent, true) },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            SecondaryButton(
+                                text = "New game",
+                                onClick = { haptics.tap(); confirmDiscard = SavedMode.VS_BOT },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        } else {
+                            PrimaryButton(
+                                text = "Start",
+                                onClick = { haptics.confirm(); onStartVsBot(choice, opponent, false) },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
                     }
                 }
             }
+            MoreBelowHint(
+                visible = scroll.canScrollForward,
+                onClick = { scope.launch { scroll.animateScrollTo(scroll.maxValue) } },
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
         }
     }
 
@@ -252,6 +290,29 @@ fun HomeScreen(
                 TextButton(onClick = { haptics.tap(); confirmDiscard = null }) { Text("Cancel") }
             },
         )
+    }
+}
+
+/** Fade and arrow at the bottom edge, shown while more content sits below. */
+@Composable
+private fun MoreBelowHint(visible: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    AnimatedVisibility(visible, modifier = modifier, enter = fadeIn(), exit = fadeOut()) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .background(Brush.verticalGradient(listOf(Color.Transparent, Felt.Deep.copy(alpha = 0.85f))))
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                .padding(top = 24.dp, bottom = 4.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            IconButton(onClick = onClick) {
+                Icon(
+                    Icons.Filled.KeyboardArrowDown,
+                    contentDescription = "Scroll down for more",
+                    tint = Felt.OnDark,
+                )
+            }
+        }
     }
 }
 
