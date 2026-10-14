@@ -57,6 +57,7 @@ object AppConfig {
             Opponent.VISHY  to MoveSelection(margin = 0.30f, temperature = 0.10f,  variedPlies = 20, taperPlies = 12),
             Opponent.GUK    to MoveSelection(margin = 0.20f, temperature = 0.07f,  variedPlies = 16, taperPlies = 10),
             Opponent.ARJUN  to MoveSelection(margin = 0.15f, temperature = 0.05f,  variedPlies = 14, taperPlies = 8),
+            Opponent.SHADOW to MoveSelection(margin = 0.05f, temperature = 0.02f,  variedPlies = 12, taperPlies = 8),
             Opponent.PRAGG  to MoveSelection(margin = 0.05f, temperature = 0.02f,  variedPlies = 12, taperPlies = 8),
             Opponent.KONERU to MoveSelection(margin = 0.04f, temperature = 0.015f, variedPlies = 10, taperPlies = 6),
         )
@@ -66,6 +67,20 @@ object AppConfig {
 
         /** Delay before auto-passing a side with no legal moves, in ms. */
         const val AUTO_PASS_DELAY_MS: Long = 500L
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Learning (bots that improve from their games, e.g. Shadow)
+    // ─────────────────────────────────────────────────────────────────────
+    object Learning {
+        /**
+         * How far into a game the opening book steers, in plies (discs
+         * placed). Before this, a learning bot looks for alternatives to
+         * every line it has played and avoids repeating its losses. After
+         * it, the bot just searches. Higher = longer memory, but each
+         * finished game costs up to this many extra searches to learn.
+         */
+        const val BOOK_HORIZON_PLIES: Int = 30
     }
 
     // ─────────────────────────────────────────────────────────────────────

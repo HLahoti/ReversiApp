@@ -9,6 +9,9 @@ import kotlin.random.Random
 /** Leaf evaluator — higher is better for `player`. */
 typealias Evaluator = (Board, Player) -> Float
 
+/** A root move and its search score, from the mover's point of view. */
+data class ScoredMove(val move: Move, val score: Float)
+
 /** Negamax α-β search.  Mirrors the C++ AlphaBetaSearch. */
 class AlphaBetaSearch(var depth: Int = 3) {
 
@@ -46,6 +49,23 @@ class AlphaBetaSearch(var depth: Int = 3) {
         return MoveSelection.sample(moves, scores, bestScore, margin, temperature, random)
     }
 
+    /**
+     * The best of [candidates] (legal moves for [player]) with its exact
+     * search score, or null if [candidates] is empty. Unlike [chooseMove] the
+     * caller picks which root moves are in play, e.g. to score every
+     * alternative to the moves already tried from a position.
+     */
+    fun bestOf(board: Board, player: Player, candidates: List<Move>, eval: Evaluator): ScoredMove? {
+        var best: ScoredMove? = null
+        for (m in candidates) {
+            val alpha = best?.score ?: -INF
+            val child = board.apply(m, player).first
+            val score = -negamax(child, player.opponent(), depth - 1, -INF, -alpha, eval)
+            if (best == null || score > best.score) best = ScoredMove(m, score)
+        }
+        return best
+    }
+
     private fun negamax(
         board: Board, player: Player, depth: Int,
         a: Float, b: Float, eval: Evaluator,
@@ -72,7 +92,11 @@ class AlphaBetaSearch(var depth: Int = 3) {
         private const val INF = Float.POSITIVE_INFINITY
         private const val WIN = 1000f
 
-        private fun terminalScore(board: Board, player: Player): Float {
+        /**
+         * Exact score of a finished game for [player]: beyond ±[WIN], so any
+         * decided result outranks every heuristic evaluation.
+         */
+        fun terminalScore(board: Board, player: Player): Float {
             val me = board.count(player.toCell())
             val opp = board.count(player.opponent().toCell())
             val diff = me - opp

@@ -3,8 +3,11 @@ package com.example.reversi.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.reversi.bot.Bot
+import com.example.reversi.bot.BotPlayer
+import com.example.reversi.bot.Bots
 import com.example.reversi.bot.Opponent
+import com.example.reversi.bot.learning.GameRecord
+import com.example.reversi.bot.learning.LearningScope
 import com.example.reversi.config.AppConfig
 import com.example.reversi.data.GameStore
 import com.example.reversi.data.SavedGame
@@ -112,11 +115,14 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private var botJob: Job? = null
     private var openingJob: Job? = null
     private var sessionJob: Job? = null
-    private var bot: Bot? = null
+    private var bot: BotPlayer? = null
     private var opponent: Opponent? = null
 
     /** Every ply that has been applied, in order. Replayed on resume, written on persist. */
     private val moves = mutableListOf<Move>()
+
+    /** The finished game last handed to the bot, so each game is reported once. */
+    private var reportedGame: List<Move>? = null
 
     /** Set once configure/resume has run, so persist() knows which file to write. */
     private var mode: SavedMode? = null
@@ -441,6 +447,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         _botThinking.value = false
         _animating.value = false
         moves.clear()
+        reportedGame = null
         _log.value = emptyList()
         _viewingIndex.value = -1
     }
@@ -552,7 +559,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun maybeRunBot() {
         val cur = _state.value
-        if (cur.isTerminal) return
+        if (cur.isTerminal) {
+            reportFinishedGame()
+            return
+        }
 
         // Auto-pass when the side-to-move has no legal moves. In online mode
         // we only ever auto-pass for ourselves — the opponent's auto-pass
@@ -580,12 +590,30 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         val o = slotOpponent()
         botJob = viewModelScope.launch {
             val chosen = withContext(Dispatchers.Default) {
-                val b = bot ?: Bot.load(getApplication(), o).also { bot = it }
+                val b = bot ?: Bots.load(getApplication(), o).also { bot = it }
                 b.chooseMove(cur.board, cur.toMove)
             }
             _botThinking.value = false
             delay(AppConfig.Bot.THINKING_MIN_MS)
             applyMove(chosen)
+        }
+    }
+
+    /**
+     * Hand a finished vs-bot game to its bot, so a learning bot can study it.
+     * Runs on [LearningScope] so learning outlives this screen. A game is
+     * reported once; rewinding and finishing a different line reports again.
+     */
+    private fun reportFinishedGame() {
+        if (isOnline) return
+        val botColor = humanColorIn(_players.value)?.opponent() ?: return
+        if (reportedGame == moves) return
+        val record = GameRecord(moves.toList(), botColor)
+        reportedGame = record.moves
+        val app = getApplication<Application>()
+        val o = slotOpponent()
+        LearningScope.launch {
+            runCatching { Bots.load(app, o).onGameFinished(record) }
         }
     }
 

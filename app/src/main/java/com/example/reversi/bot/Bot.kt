@@ -24,14 +24,23 @@ class Bot(
     val id: Int = -1,
     val selection: MoveSelection = MoveSelection.DETERMINISTIC,
     private val random: Random = Random.Default,
-) {
+) : BotPlayer, SearchEngine {
     private val search = AlphaBetaSearch(searchDepth)
+    private val eval: Evaluator = { b, p -> evaluator.evaluate(b, p) }
 
-    fun chooseMove(board: Board, player: Player): Move =
-        search.chooseMove(board, player, { b, p -> evaluator.evaluate(b, p) }, selection, random)
+    override fun chooseMove(board: Board, player: Player): Move =
+        search.chooseMove(board, player, eval, selection, random)
+
+    /** Always deterministic: [selection] only affects [chooseMove]. */
+    override fun bestOf(board: Board, player: Player, candidates: List<Move>): ScoredMove? =
+        search.bestOf(board, player, candidates, eval)
 
     companion object {
-        /** Load the bundled model for [opponent]. */
+        /**
+         * Load the bundled model for [opponent] as a plain, non-learning
+         * engine. The app goes through [Bots.load], which adds learning for
+         * opponents that have it.
+         */
         fun load(ctx: Context, opponent: Opponent): Bot {
             ctx.assets.open(opponent.assetPath).use { stream ->
                 val model = ModelLoader.load(stream)
