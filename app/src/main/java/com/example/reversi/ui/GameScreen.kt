@@ -144,7 +144,7 @@ fun GameScreen(
                             black = state.blackCount,
                             white = state.whiteCount,
                             online = o,
-                            onPlayAgain = { haptics.confirm(); vm.resetGame() },
+                            onPlayAgain = { haptics.confirm(); vm.playAgain() },
                         )
                     } else if (o != null && o.opponentLeft) {
                         GlassPanel(Modifier.fillMaxWidth()) {

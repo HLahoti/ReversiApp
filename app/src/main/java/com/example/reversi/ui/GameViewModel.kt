@@ -392,6 +392,20 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * "Play again" after a finished game: start a new one with the colours
+     * swapped, so the first move alternates. Online, the rematch swaps the
+     * room's colours once both players agree.
+     */
+    fun playAgain() {
+        if (isOnline) {
+            requestRematch()
+            return
+        }
+        _players.update { Players(black = it.white, white = it.black) }
+        resetGame()
+    }
+
+    /**
      * Call on back / app pause. Writes the current unfinished game to the
      * matching save slot, or clears it if there is nothing worth resuming
      * (no moves yet, or the game is already over). No-op online.

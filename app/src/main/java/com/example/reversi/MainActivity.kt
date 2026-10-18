@@ -137,7 +137,14 @@ class MainActivity : ComponentActivity() {
                             if (saved != null) vm.resume(saved, players, opponent)
                             else vm.configure(players, opponent)
                         }
-                        val humanName = human.name.lowercase()
+                        // Follow the view-model, since "Play again" swaps colours.
+                        val players by vm.players.collectAsState()
+                        val current = when (Participant.BOT) {
+                            players.white -> Player.BLACK
+                            players.black -> Player.WHITE
+                            else -> human // not configured yet
+                        }
+                        val humanName = current.name.lowercase()
                         GameScreen(
                             vm,
                             title = "vs ${opponent.displayName} · you are $humanName",
