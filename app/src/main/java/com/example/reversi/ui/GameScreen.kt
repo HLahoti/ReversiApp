@@ -25,12 +25,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -71,6 +73,7 @@ fun GameScreen(
     val online by vm.online.collectAsState()
     val haptics = rememberHaptics()
     var paused by remember { mutableStateOf(false) }
+    var confirmReset by remember { mutableStateOf(false) }
 
     // Save on app pause / background and again when the screen is torn down
     // (back arrow, system back, or navigating away). persist() internally
@@ -103,14 +106,6 @@ fun GameScreen(
                     TopBar(
                         title = title,
                         onBack = { haptics.tap(); onBack() },
-                        // Online, a new game needs both players: that's the
-                        // rematch flow behind "Play again", not a reset button.
-                        onReset = if (online == null) {
-                            { haptics.confirm(); vm.resetGame() }
-                        } else {
-                            null
-                        },
-                        onPause = { haptics.tap(); paused = true },
                     )
 
                     Spacer(Modifier.height(8.dp))
@@ -137,7 +132,19 @@ fun GameScreen(
                         },
                     )
 
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(8.dp))
+                    GameControls(
+                        onPause = { haptics.tap(); paused = true },
+                        // Online, a new game needs both players: that's the
+                        // rematch flow behind "Play again", not a reset button.
+                        onReset = if (online == null) {
+                            { haptics.tap(); confirmReset = true }
+                        } else {
+                            null
+                        },
+                    )
+
+                    Spacer(Modifier.height(8.dp))
                     val o = online
                     if (state.isTerminal) {
                         EndGamePanel(
@@ -183,6 +190,24 @@ fun GameScreen(
         if (paused) {
             PausedOverlay(onResume = { haptics.tap(); paused = false })
         }
+
+        if (confirmReset) {
+            AlertDialog(
+                onDismissRequest = { confirmReset = false },
+                title = { Text("Reset game?") },
+                text = { Text("The current game will be lost and a new one will start. This can't be undone.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        haptics.confirm()
+                        confirmReset = false
+                        vm.resetGame()
+                    }) { Text("Reset") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { haptics.tap(); confirmReset = false }) { Text("Cancel") }
+                },
+            )
+        }
     }
 }
 
@@ -219,8 +244,6 @@ private fun PausedOverlay(onResume: () -> Unit) {
 private fun TopBar(
     title: String,
     onBack: () -> Unit,
-    onReset: (() -> Unit)?,
-    onPause: () -> Unit,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -235,14 +258,28 @@ private fun TopBar(
             )
         }
         Text(title, color = Felt.OnDark, fontSize = 20.sp, fontWeight = FontWeight.Medium)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onPause) {
-                Icon(Icons.Default.Pause, contentDescription = "Pause", tint = Felt.OnDark)
-            }
-            if (onReset != null) {
-                IconButton(onClick = onReset) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Reset", tint = Felt.OnDark)
-                }
+        // Balances the back button so the title stays centred.
+        Spacer(Modifier.size(48.dp))
+    }
+}
+
+/** Pause and reset, in a row under the board. [onReset] is null online. */
+@Composable
+private fun GameControls(
+    onPause: () -> Unit,
+    onReset: (() -> Unit)?,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        IconButton(onClick = onPause) {
+            Icon(Icons.Default.Pause, contentDescription = "Pause", tint = Felt.OnDark)
+        }
+        if (onReset != null) {
+            IconButton(onClick = onReset) {
+                Icon(Icons.Default.Refresh, contentDescription = "Reset", tint = Felt.OnDark)
             }
         }
     }
