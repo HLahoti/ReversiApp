@@ -1,5 +1,6 @@
 package com.example.reversi.ui
 
+import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -38,6 +40,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -47,6 +50,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -58,6 +62,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import com.example.reversi.update.Updates
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -80,6 +85,7 @@ fun HomeScreen(
     onStartVsBot: (humanColor: HumanColorChoice, opponent: Opponent, resume: Boolean) -> Unit,
     onStartOnline: () -> Unit,
     onHowToPlay: () -> Unit,
+    onSettings: () -> Unit,
 ) {
     val haptics = rememberHaptics()
     val ctx = LocalContext.current
@@ -157,6 +163,7 @@ fun HomeScreen(
                         onPickVsBot = { haptics.tap(); step = SavedMode.VS_BOT },
                         onPickOnline = { haptics.confirm(); onStartOnline() },
                         onHowToPlay = { haptics.tap(); onHowToPlay() },
+                        onSettings = { haptics.tap(); onSettings() },
                     )
                     SavedMode.TWO_PLAYER -> OptionsPanel(
                         title = "Pass & play",
@@ -254,6 +261,15 @@ fun HomeScreen(
                     }
                 }
             }
+            Column(
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            ) {
+                UpdateBanner()
+            }
             MoreBelowHint(
                 visible = scroll.canScrollForward,
                 onClick = { scope.launch { scroll.animateScrollTo(scroll.maxValue) } },
@@ -293,6 +309,39 @@ fun HomeScreen(
     }
 }
 
+/**
+ * "Version x is available", while an update is known and the player hasn't
+ * closed this version's banner. Update opens it; see [Updates].
+ */
+@Composable
+private fun UpdateBanner() {
+    val haptics = rememberHaptics()
+    val activity = LocalContext.current as? Activity
+    val update by Updates.available.collectAsState()
+    val dismissed by Updates.dismissedVersion.collectAsState()
+    val u = update?.takeIf { it.versionName != dismissed } ?: return
+    GlassPanel(
+        Modifier.fillMaxWidth(),
+        cornerRadius = 16,
+        padding = PaddingValues(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Version ${u.versionName} is available",
+                color = Felt.OnDark,
+                fontSize = 14.sp,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = { haptics.confirm(); activity?.let(Updates::startUpdate) }) {
+                Text("Update", color = Felt.Highlight, fontWeight = FontWeight.Medium)
+            }
+            IconButton(onClick = { haptics.tap(); Updates.dismissBanner() }) {
+                Icon(Icons.Default.Close, contentDescription = "Dismiss", tint = Felt.OnDarkDim)
+            }
+        }
+    }
+}
+
 /** Fade and arrow at the bottom edge, shown while more content sits below. */
 @Composable
 private fun MoreBelowHint(visible: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
@@ -322,6 +371,7 @@ private fun ModePicker(
     onPickVsBot: () -> Unit,
     onPickOnline: () -> Unit,
     onHowToPlay: () -> Unit,
+    onSettings: () -> Unit,
 ) {
     Column(
         Modifier.fillMaxWidth(),
@@ -348,6 +398,12 @@ private fun ModePicker(
         SecondaryButton(
             text = "How to play",
             onClick = onHowToPlay,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(12.dp))
+        SecondaryButton(
+            text = "Settings",
+            onClick = onSettings,
             modifier = Modifier.fillMaxWidth(),
         )
     }

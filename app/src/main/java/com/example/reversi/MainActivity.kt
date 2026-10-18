@@ -36,6 +36,9 @@ import com.example.reversi.ui.HowToPlayScreen
 import com.example.reversi.ui.HumanColorChoice
 import com.example.reversi.ui.OnlineLobbyScreen
 import com.example.reversi.ui.ReversiTheme
+import com.example.reversi.ui.SettingsScreen
+import com.example.reversi.update.GitHubReleaseChecker
+import com.example.reversi.update.Updates
 import com.example.reversi.ui.Participant
 import com.example.reversi.ui.Players
 import kotlin.random.Random
@@ -53,6 +56,16 @@ class MainActivity : ComponentActivity() {
         // tracker from a previous session (host or guest). Each is deleted if
         // still around, dropped if the other player already cleaned up.
         lifecycleScope.launch { runCatching { onlineClient.sweepTrackedRooms() } }
+
+        // Update checks, while the app is sideloaded from GitHub Releases.
+        // Moving to the Play Store: swap GitHubReleaseChecker for a Play
+        // in-app updates checker here; see UpdateChecker for the details.
+        Updates.install(
+            this,
+            GitHubReleaseChecker(installedVersion = BuildConfig.VERSION_NAME),
+            installedVersion = BuildConfig.VERSION_NAME,
+        )
+        lifecycleScope.launch { Updates.checkIfDue() }
 
         enableEdgeToEdge()
         setContent {
@@ -81,7 +94,11 @@ class MainActivity : ComponentActivity() {
                             },
                             onStartOnline = { nav.navigate("online/lobby") },
                             onHowToPlay = { nav.navigate("howto") },
+                            onSettings = { nav.navigate("settings") },
                         )
+                    }
+                    composable("settings") {
+                        SettingsScreen(onBack = { nav.popBackStack() })
                     }
                     composable("howto") {
                         HowToPlayScreen(onBack = { nav.popBackStack() })
