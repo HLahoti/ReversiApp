@@ -112,11 +112,16 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private val _resigned = MutableStateFlow<Player?>(null)
     val resigned: StateFlow<Player?> = _resigned.asStateFlow()
 
+    /** The move the bot suggests for the human, or null. Cleared once the board changes. */
+    private val _hint = MutableStateFlow<Move?>(null)
+    val hint: StateFlow<Move?> = _hint.asStateFlow()
+
     /** Null when playing offline; populated in online mode. */
     private val _online = MutableStateFlow<OnlineUiState?>(null)
     val online: StateFlow<OnlineUiState?> = _online.asStateFlow()
 
     private var botJob: Job? = null
+    private var hintJob: Job? = null
     private var openingJob: Job? = null
     private var sessionJob: Job? = null
     private var bot: BotPlayer? = null
@@ -283,9 +288,37 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         }
         val human = humanColorIn(_players.value) ?: return
         botJob?.cancel()
+        clearHint()
         _botThinking.value = false
         _resigned.value = human
         mode?.let { store.clear(it, slotOpponent()) }
+    }
+
+    /**
+     * Vs-bot only: ask the bot being played for a move on the human's
+     * behalf. It is shown the board from the human's side, as if it were
+     * the bot's own turn, so it picks the move it would make there.
+     */
+    fun requestHint() {
+        if (isOnline || isGameOver()) return
+        val human = humanColorIn(_players.value) ?: return
+        if (_botThinking.value || _animating.value || hintJob?.isActive == true) return
+        val cur = _state.value
+        if (cur.toMove != human || cur.legalMoves.isEmpty()) return
+        val o = slotOpponent()
+        hintJob = viewModelScope.launch {
+            val chosen = withContext(Dispatchers.Default) {
+                val b = bot ?: Bots.load(getApplication(), o).also { bot = it }
+                b.chooseMove(cur.board, human)
+            }
+            // Drop it if the board moved on while the bot was thinking.
+            if (_state.value === cur && !chosen.isPass) _hint.value = chosen
+        }
+    }
+
+    private fun clearHint() {
+        hintJob?.cancel()
+        _hint.value = null
     }
 
     private fun isGameOver(): Boolean = _state.value.isTerminal || _resigned.value != null
@@ -401,6 +434,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         if (index < 0 || index >= moves.size) return
         if (index == _viewingIndex.value) return
         botJob?.cancel()
+        clearHint()
         _botThinking.value = false
         _flips.value = FlipAnimations()
         _animating.value = false
@@ -482,6 +516,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         if (isOnline && (session == null || cur.toMove != localColor)) return
         val mover = cur.toMove
         val next = cur.play(Move.PASS) ?: return
+        clearHint()
         truncateToViewing()
         moves.add(Move.PASS)
         _state.value = next
@@ -492,6 +527,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun resetInternal() {
         botJob?.cancel()
+        clearHint()
         openingJob?.cancel()
         _openingFrame.value = null
         _state.value = GameState()
@@ -553,6 +589,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         val cur = _state.value
         val mover = cur.toMove
         val next = cur.play(move) ?: return
+        clearHint()
         truncateToViewing()
         _state.value = next
         moves.add(move)

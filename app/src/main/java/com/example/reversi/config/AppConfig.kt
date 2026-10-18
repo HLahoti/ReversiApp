@@ -149,6 +149,13 @@ object AppConfig {
         /** Hint-dot colour (semi-transparent). */
         val LEGAL_HINT_COLOR: Color = Color(0x66FFFFFF)
 
+        /** The hinted dot pulses between these multiples of the hint-dot diameter. */
+        const val HINT_PULSE_MIN_SCALE: Float = 1f
+        const val HINT_PULSE_MAX_SCALE: Float = 2.6f
+
+        /** One grow (or shrink) of the hint pulse, in ms. */
+        const val HINT_PULSE_MS: Int = 550
+
         /** Last-move ring diameter as a fraction of cell width. */
         const val LAST_MOVE_RING_DIAMETER_RATIO: Float = 0.82f
 

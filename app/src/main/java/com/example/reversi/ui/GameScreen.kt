@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
@@ -73,6 +74,7 @@ fun GameScreen(
     val openingFrame by vm.openingFrame.collectAsState()
     val online by vm.online.collectAsState()
     val resigned by vm.resigned.collectAsState()
+    val hint by vm.hint.collectAsState()
     val haptics = rememberHaptics()
     var paused by remember { mutableStateOf(false) }
     var confirmReset by remember { mutableStateOf(false) }
@@ -83,6 +85,8 @@ fun GameScreen(
         null -> players.black == Participant.BOT || players.white == Participant.BOT
         else -> !o.opponentLeft
     }
+    val vsBot = online == null &&
+        (players.black == Participant.BOT || players.white == Participant.BOT)
 
     // Save on app pause / background and again when the screen is torn down
     // (back arrow, system back, or navigating away). persist() internally
@@ -131,6 +135,7 @@ fun GameScreen(
                         flips = flips,
                         showHints = !thinking && !animating && resigned == null &&
                             players.of(state.toMove) == Participant.HUMAN,
+                        hint = hint,
                         openingFrame = openingFrame,
                         onTap = { x, y ->
                             val mv = com.example.reversi.game.Move(x, y)
@@ -156,6 +161,14 @@ fun GameScreen(
                         } else {
                             null
                         },
+                        onHint = if (vsBot && !gameOver) {
+                            { haptics.tap(); vm.requestHint() }
+                        } else {
+                            null
+                        },
+                        hintEnabled = !thinking && !animating && hint == null &&
+                            players.of(state.toMove) == Participant.HUMAN &&
+                            state.legalMoves.isNotEmpty(),
                     )
 
                     Spacer(Modifier.height(8.dp))
@@ -298,14 +311,17 @@ private fun TopBar(
 }
 
 /**
- * Pause, reset and resign, in a row under the board. [onReset] is null
- * online; [onResign] is null in pass-and-play and once the game is over.
+ * Pause, reset, resign and hint, in a row under the board. [onReset] is null
+ * online; [onResign] is null in pass-and-play and once the game is over;
+ * [onHint] is null outside vs-bot games and once the game is over.
  */
 @Composable
 private fun GameControls(
     onPause: () -> Unit,
     onReset: (() -> Unit)?,
     onResign: (() -> Unit)?,
+    onHint: (() -> Unit)?,
+    hintEnabled: Boolean,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -323,6 +339,15 @@ private fun GameControls(
         if (onResign != null) {
             IconButton(onClick = onResign) {
                 Icon(Icons.Default.Flag, contentDescription = "Resign", tint = Felt.OnDark)
+            }
+        }
+        if (onHint != null) {
+            IconButton(onClick = onHint, enabled = hintEnabled) {
+                Icon(
+                    Icons.Default.Lightbulb,
+                    contentDescription = "Hint",
+                    tint = if (hintEnabled) Felt.OnDark else Felt.OnDarkDim,
+                )
             }
         }
     }

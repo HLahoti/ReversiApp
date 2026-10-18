@@ -1,5 +1,11 @@
 package com.example.reversi.ui
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -36,6 +42,7 @@ import com.example.reversi.R
 import com.example.reversi.config.AppConfig
 import com.example.reversi.game.Cell
 import com.example.reversi.game.GameState
+import com.example.reversi.game.Move
 import kotlinx.coroutines.delay
 
 @Composable
@@ -46,6 +53,8 @@ fun BoardView(
     openingFrame: Int?,
     onTap: (Int, Int) -> Unit,
     modifier: Modifier = Modifier,
+    /** The bot's suggested move, drawn as a pulsing hint dot. */
+    hint: Move? = null,
 ) {
     val cfg = AppConfig.Board
     val notation = AppConfig.Notation
@@ -78,6 +87,7 @@ fun BoardView(
                     state = state,
                     flips = flips,
                     showHints = showHints,
+                    hint = hint,
                     openingFrame = openingFrame,
                     onTap = onTap,
                     boardDp = boardDp,
@@ -95,6 +105,7 @@ private fun Board(
     state: GameState,
     flips: FlipAnimations,
     showHints: Boolean,
+    hint: Move?,
     openingFrame: Int?,
     onTap: (Int, Int) -> Unit,
     boardDp: Dp,
@@ -145,9 +156,14 @@ private fun Board(
                         Modifier.size(cellDp).offset(x = xDp, y = yDp),
                         contentAlignment = Alignment.Center,
                     ) {
-                        LegalHintDot(with(density) {
+                        val dotDp = with(density) {
                             (cellPx * cfg.LEGAL_HINT_DIAMETER_RATIO).toDp()
-                        })
+                        }
+                        if (hint != null && hint.x == x && hint.y == y) {
+                            PulsingHintDot(dotDp)
+                        } else {
+                            LegalHintDot(dotDp)
+                        }
                     }
                 }
 
@@ -228,6 +244,24 @@ private fun RankLabels(cellDp: Dp, stripWidth: Dp) {
 private fun LegalHintDot(sizeDp: Dp) {
     Canvas(Modifier.size(sizeDp)) {
         drawCircle(color = AppConfig.Board.LEGAL_HINT_COLOR)
+    }
+}
+
+/** A [LegalHintDot] that grows and shrinks, marking the suggested move. */
+@Composable
+private fun PulsingHintDot(sizeDp: Dp) {
+    val cfg = AppConfig.Board
+    val scale by rememberInfiniteTransition(label = "hint").animateFloat(
+        initialValue = cfg.HINT_PULSE_MIN_SCALE,
+        targetValue = cfg.HINT_PULSE_MAX_SCALE,
+        animationSpec = infiniteRepeatable(
+            tween(cfg.HINT_PULSE_MS, easing = FastOutSlowInEasing),
+            RepeatMode.Reverse,
+        ),
+        label = "hintScale",
+    )
+    Canvas(Modifier.size(sizeDp)) {
+        drawCircle(color = cfg.LEGAL_HINT_COLOR, radius = size.minDimension / 2f * scale)
     }
 }
 
