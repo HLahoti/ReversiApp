@@ -38,6 +38,14 @@ interface OnlineSession {
     suspend fun requestRematch(round: Int)
 
     /**
+     * Forfeit round [round] as this device's colour. Every [state] emission
+     * for that round then carries [SessionState.resignedBy], and the room
+     * refuses further moves in it. A request for a round that has already
+     * moved on, or that someone already resigned, is ignored.
+     */
+    suspend fun resign(round: Int)
+
+    /**
      * Delete the room and every move under it, then close listeners.
      *
      * Idempotent and best-effort: if the room is already gone (the other

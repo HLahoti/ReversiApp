@@ -21,6 +21,8 @@ import java.util.Date
  *       round:       Int        (0 for the first game, +1 per rematch)
  *       rematchHost: Boolean    (host pressed "Play again" this round)
  *       rematchGuest: Boolean   (guest pressed "Play again" this round)
+ *       resignedBy:  "BLACK" | "WHITE"  (absent until someone resigns)
+ *       resignedRound: Int      (the round resignedBy applies to)
  *       expiresAt:   Timestamp  (TTL field — see Firestore TTL policy)
  *
  *   rooms/{code}/moves/{"%03d-%06d" round, seq}:
@@ -49,6 +51,8 @@ internal object FS {
     const val F_ROUND = "round"
     const val F_REMATCH_HOST = "rematchHost"
     const val F_REMATCH_GUEST = "rematchGuest"
+    const val F_RESIGNED_BY = "resignedBy"
+    const val F_RESIGNED_ROUND = "resignedRound"
     const val F_EXPIRES_AT = "expiresAt"
 
     const val F_SEQ = "seq"

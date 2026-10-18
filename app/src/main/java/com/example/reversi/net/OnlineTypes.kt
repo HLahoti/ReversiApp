@@ -81,6 +81,8 @@ data class SessionState(
     val rematchRequestedByMe: Boolean = false,
     /** The other player has asked for a rematch of the current round. */
     val rematchRequestedByOpponent: Boolean = false,
+    /** The colour that resigned the current round, or null if nobody has. */
+    val resignedBy: Player? = null,
 ) {
     val isJoinable: Boolean get() = status == SessionStatus.WAITING && opponent == null
     val isPlayable: Boolean get() = status == SessionStatus.ACTIVE

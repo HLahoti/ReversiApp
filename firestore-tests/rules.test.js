@@ -148,6 +148,24 @@ class V12Client {
   }
 }
 
+/** v1.6 adds resigning on top of the v1.2 traffic. */
+class V16Client extends V12Client {
+  async resign(round, code = CODE) {
+    const ref = this.room(code);
+    await runTransaction(this.db, async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists()) throw new Error('RoomNotFound');
+      const d = snap.data();
+      const current = d.round ?? 0;
+      // Already moved on, or someone resigned this round first.
+      if (current !== round || d.resignedRound === current) return;
+      const hostColor = d.hostColor ?? 'BLACK';
+      const mine = d.hostUid === this.uid ? hostColor : (hostColor === 'BLACK' ? 'WHITE' : 'BLACK');
+      tx.update(ref, { resignedBy: mine, resignedRound: current, expiresAt: ttl() });
+    });
+  }
+}
+
 let env;
 
 before(async () => {
@@ -165,6 +183,15 @@ beforeEach(async () => { await env.clearFirestore(); });
 async function activeRoom() {
   const host = new V12Client(env, 'host');
   const guest = new V12Client(env, 'guest');
+  await host.createRoom();
+  await guest.joinRoom();
+  return { host, guest };
+}
+
+/** activeRoom(), with v1.6 clients. */
+async function activeRoom16() {
+  const host = new V16Client(env, 'host');
+  const guest = new V16Client(env, 'guest');
   await host.createRoom();
   await guest.joinRoom();
   return { host, guest };
@@ -271,6 +298,51 @@ describe('v1.2 client compatibility', () => {
       hostName: null, guestUid: null, guestName: null, moveCount: 0, round: 0,
       rematchHost: false, rematchGuest: false, expiresAt: ttl(),
     }));
+  });
+});
+
+describe('resigning (v1.6)', () => {
+  it('records the resigning colour for the round and stops further moves', async () => {
+    const { host, guest } = await activeRoom16();
+    await host.sendMove(0, 1, 'BLACK', 2, 3);
+    await guest.resign(0);
+    const r = await roomData();
+    assert.equal(r.resignedBy, 'WHITE');
+    assert.equal(r.resignedRound, 0);
+    await assertFails(guest.sendMove(0, 2, 'WHITE', 2, 2));
+    await assertFails(host.pass(0, 2, 'BLACK'));
+    // A second resignation of the same round is a no-op, not an overwrite.
+    await host.resign(0);
+    assert.equal((await roomData()).resignedBy, 'WHITE');
+  });
+
+  it('lets the next round play on after a rematch, with either client starting it', async () => {
+    const { host, guest } = await activeRoom16();
+    await host.resign(0);
+    assert.equal((await roomData()).resignedBy, 'BLACK');
+    // The v1.2 rematch start doesn't know about resigning, and needn't.
+    const oldGuest = new V12Client(env, 'guest');
+    assert.equal(await host.requestRematch(0), null);
+    assert.equal(await oldGuest.requestRematch(0), 1);
+    // Round 1: guest is BLACK now. The round-0 resignation no longer applies.
+    await guest.sendMove(1, 1, 'BLACK', 2, 3);
+    await host.sendMove(1, 2, 'WHITE', 2, 2);
+    await guest.resign(1);
+    const r = await roomData();
+    assert.equal(r.resignedBy, 'BLACK');
+    assert.equal(r.resignedRound, 1);
+  });
+
+  it('works against a v1.2 opponent, who simply sees moves refused', async () => {
+    const host = new V16Client(env, 'host');
+    const guest = new V12Client(env, 'guest');
+    await host.createRoom();
+    await guest.joinRoom();
+    await host.sendMove(0, 1, 'BLACK', 2, 3);
+    await host.resign(0);
+    await assertFails(guest.sendMove(0, 2, 'WHITE', 2, 2));
+    await guest.finish();
+    assert.equal(await roomData(), undefined);
   });
 });
 
@@ -444,6 +516,27 @@ describe('attacks: a malicious opponent', () => {
     await assertFails(updateDoc(host.room(), { ...forced, hostColor: 'BLACK' }));
     await assertFails(updateDoc(host.room(), { ...forced, round: 2 }));
     await assertSucceeds(updateDoc(host.room(), forced));
+  });
+
+  it('cannot resign for the other player, for another round, or twice', async () => {
+    const { host, guest } = await activeRoom();
+    const t = ttl();
+    await assertFails(updateDoc(guest.room(), { resignedBy: 'BLACK', resignedRound: 0, expiresAt: t }));
+    await assertFails(updateDoc(host.room(), { resignedBy: 'WHITE', resignedRound: 0, expiresAt: t }));
+    await assertFails(updateDoc(guest.room(), { resignedBy: 'WHITE', resignedRound: 1, expiresAt: t }));
+    await assertFails(updateDoc(guest.room(), { resignedBy: 'WHITE', expiresAt: t }));
+    await assertFails(updateDoc(guest.room(), { resignedBy: 'WHITE', resignedRound: 0, moveCount: 3, expiresAt: t }));
+    await assertFails(updateDoc(guest.room(), { resignedBy: 'WHITE', resignedRound: 0, round: 1, expiresAt: t }));
+    await assertSucceeds(updateDoc(guest.room(), { resignedBy: 'WHITE', resignedRound: 0, expiresAt: t }));
+    // Nor take it back, or pin it on the winner afterwards.
+    await assertFails(updateDoc(guest.room(), { resignedRound: -1, expiresAt: t }));
+    await assertFails(updateDoc(host.room(), { resignedBy: 'BLACK', resignedRound: 0, expiresAt: t }));
+  });
+
+  it("cannot resign in a room that's still waiting for a guest", async () => {
+    const host = new V16Client(env, 'host');
+    await host.createRoom();
+    await assertFails(host.resign(0));
   });
 
   it("cannot play in a room that's still waiting for a guest", async () => {

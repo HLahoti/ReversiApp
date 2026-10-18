@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
@@ -71,9 +72,17 @@ fun GameScreen(
     val viewingIndex by vm.viewingIndex.collectAsState()
     val openingFrame by vm.openingFrame.collectAsState()
     val online by vm.online.collectAsState()
+    val resigned by vm.resigned.collectAsState()
     val haptics = rememberHaptics()
     var paused by remember { mutableStateOf(false) }
     var confirmReset by remember { mutableStateOf(false) }
+    var confirmResign by remember { mutableStateOf(false) }
+    val gameOver = state.isTerminal || resigned != null
+    // Online and vs-bot have one human seat to resign; pass-and-play has two.
+    val canResign = !gameOver && when (val o = online) {
+        null -> players.black == Participant.BOT || players.white == Participant.BOT
+        else -> !o.opponentLeft
+    }
 
     // Save on app pause / background and again when the screen is torn down
     // (back arrow, system back, or navigating away). persist() internally
@@ -120,7 +129,7 @@ fun GameScreen(
                     BoardView(
                         state = state,
                         flips = flips,
-                        showHints = !thinking && !animating &&
+                        showHints = !thinking && !animating && resigned == null &&
                             players.of(state.toMove) == Participant.HUMAN,
                         openingFrame = openingFrame,
                         onTap = { x, y ->
@@ -142,14 +151,21 @@ fun GameScreen(
                         } else {
                             null
                         },
+                        onResign = if (canResign) {
+                            { haptics.tap(); confirmResign = true }
+                        } else {
+                            null
+                        },
                     )
 
                     Spacer(Modifier.height(8.dp))
                     val o = online
-                    if (state.isTerminal) {
+                    if (gameOver) {
                         EndGamePanel(
                             black = state.blackCount,
                             white = state.whiteCount,
+                            resigned = resigned,
+                            resignedByMe = resigned?.let { players.of(it) == Participant.HUMAN } == true,
                             online = o,
                             onPlayAgain = { haptics.confirm(); vm.playAgain() },
                         )
@@ -189,6 +205,24 @@ fun GameScreen(
 
         if (paused) {
             PausedOverlay(onResume = { haptics.tap(); paused = false })
+        }
+
+        if (confirmResign) {
+            AlertDialog(
+                onDismissRequest = { confirmResign = false },
+                title = { Text("Resign game?") },
+                text = { Text("You'll forfeit this game and your opponent wins. This can't be undone.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        haptics.confirm()
+                        confirmResign = false
+                        vm.resign()
+                    }) { Text("Resign") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { haptics.tap(); confirmResign = false }) { Text("Cancel") }
+                },
+            )
         }
 
         if (confirmReset) {
@@ -263,11 +297,15 @@ private fun TopBar(
     }
 }
 
-/** Pause and reset, in a row under the board. [onReset] is null online. */
+/**
+ * Pause, reset and resign, in a row under the board. [onReset] is null
+ * online; [onResign] is null in pass-and-play and once the game is over.
+ */
 @Composable
 private fun GameControls(
     onPause: () -> Unit,
     onReset: (() -> Unit)?,
+    onResign: (() -> Unit)?,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -280,6 +318,11 @@ private fun GameControls(
         if (onReset != null) {
             IconButton(onClick = onReset) {
                 Icon(Icons.Default.Refresh, contentDescription = "Reset", tint = Felt.OnDark)
+            }
+        }
+        if (onResign != null) {
+            IconButton(onClick = onResign) {
+                Icon(Icons.Default.Flag, contentDescription = "Resign", tint = Felt.OnDark)
             }
         }
     }
@@ -358,10 +401,16 @@ private fun ScoreBar(
 private fun EndGamePanel(
     black: Int,
     white: Int,
+    resigned: Player?,
+    resignedByMe: Boolean,
     online: OnlineUiState?,
     onPlayAgain: () -> Unit,
 ) {
     val msg = when {
+        resigned != null -> {
+            val winner = if (resigned == Player.BLACK) "White" else "Black"
+            winner + if (resignedByMe) " wins · you resigned" else " wins · your opponent resigned"
+        }
         black > white -> "Black wins · $black – $white"
         white > black -> "White wins · $white – $black"
         else -> "Draw · $black – $white"

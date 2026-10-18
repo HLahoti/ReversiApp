@@ -108,6 +108,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private val _openingFrame = MutableStateFlow<Int?>(null)
     val openingFrame: StateFlow<Int?> = _openingFrame.asStateFlow()
 
+    /** The colour that resigned this game, or null. Ends the game like a terminal board. */
+    private val _resigned = MutableStateFlow<Player?>(null)
+    val resigned: StateFlow<Player?> = _resigned.asStateFlow()
+
     /** Null when playing offline; populated in online mode. */
     private val _online = MutableStateFlow<OnlineUiState?>(null)
     val online: StateFlow<OnlineUiState?> = _online.asStateFlow()
@@ -241,7 +245,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun requestRematch() {
         val s = session ?: return
-        if (!_state.value.isTerminal || rematchPending) return
+        if (!isGameOver() || rematchPending) return
         val round = onlineRound
         rematchPending = true
         _online.update { it?.copy(rematchRequested = true) }
@@ -255,6 +259,36 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 }
         }
     }
+
+    /**
+     * Forfeit the game as the human seat. Vs-bot it ends at once; online the
+     * room records it so the opponent's board ends too. Not offered in
+     * pass-and-play, where there is no single human seat.
+     */
+    fun resign() {
+        if (isGameOver()) return
+        if (isOnline) {
+            val s = session ?: return
+            val me = localColor ?: return
+            val round = onlineRound
+            _resigned.value = me
+            viewModelScope.launch {
+                runCatching { s.resign(round) }
+                    .onFailure { t ->
+                        if (onlineRound == round) _resigned.value = null
+                        _online.update { it?.copy(error = t.message ?: "Could not resign.") }
+                    }
+            }
+            return
+        }
+        val human = humanColorIn(_players.value) ?: return
+        botJob?.cancel()
+        _botThinking.value = false
+        _resigned.value = human
+        mode?.let { store.clear(it, slotOpponent()) }
+    }
+
+    private fun isGameOver(): Boolean = _state.value.isTerminal || _resigned.value != null
 
     override fun onCleared() {
         // If leaveOnline() wasn't called explicitly (e.g. activity killed by
@@ -312,6 +346,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             resetInternal()
             playOpening()
         }
+        // Keep an optimistic local resignation until the room confirms it.
+        snapshot.resignedBy?.let { _resigned.value = it }
         if (snapshot.rematchRequestedByMe) rematchPending = false
         _online.value = OnlineUiState(
             status = snapshot.status,
@@ -413,7 +449,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     fun persist() {
         if (isOnline) return
         val m = mode ?: return
-        if (moves.isEmpty() || _state.value.isTerminal) {
+        if (moves.isEmpty() || isGameOver()) {
             store.clear(m, slotOpponent())
             return
         }
@@ -428,6 +464,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun onTapCell(x: Int, y: Int) {
+        if (_resigned.value != null) return
         if (_botThinking.value) return
         if (_animating.value) return
         val cur = _state.value
@@ -439,6 +476,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun passTurn() {
+        if (_resigned.value != null) return
         val cur = _state.value
         if (cur.legalMoves.isNotEmpty()) return
         if (isOnline && (session == null || cur.toMove != localColor)) return
@@ -461,6 +499,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         _botThinking.value = false
         _animating.value = false
         moves.clear()
+        _resigned.value = null
         reportedGame = null
         _log.value = emptyList()
         _viewingIndex.value = -1
@@ -564,6 +603,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             runCatching { s.sendMove(round, seq, by, move) }
                 .onFailure { t ->
+                    // The room refuses moves once the opponent has resigned.
+                    if (_resigned.value != null) return@onFailure
                     _online.update { prev ->
                         prev?.copy(error = t.message ?: "Could not send move.")
                     }
@@ -572,6 +613,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun maybeRunBot() {
+        if (_resigned.value != null) return
         val cur = _state.value
         if (cur.isTerminal) {
             reportFinishedGame()
@@ -589,6 +631,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             if (!shouldAutoPass) return
             viewModelScope.launch {
                 delay(AppConfig.Bot.AUTO_PASS_DELAY_MS)
+                if (_resigned.value != null) return@launch
                 val mover = cur.toMove
                 val next = cur.play(Move.PASS) ?: return@launch
                 moves.add(Move.PASS)
@@ -609,6 +652,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             }
             _botThinking.value = false
             delay(AppConfig.Bot.THINKING_MIN_MS)
+            if (_resigned.value != null) return@launch
             applyMove(chosen)
         }
     }

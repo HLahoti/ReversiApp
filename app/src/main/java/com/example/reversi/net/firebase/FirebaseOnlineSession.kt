@@ -167,6 +167,34 @@ internal class FirebaseOnlineSession(
         }
     }
 
+    override suspend fun resign(round: Int) {
+        try {
+            db.runTransaction { tx ->
+                val snap = tx.get(roomDoc)
+                if (!snap.exists()) throw OnlineError.RoomNotFound(roomCode)
+                val current = snap.getLong(FS.F_ROUND)?.toInt() ?: 0
+                // Already moved on, or someone resigned this round first.
+                if (current != round) return@runTransaction null
+                if (snap.getLong(FS.F_RESIGNED_ROUND)?.toInt() == current) return@runTransaction null
+                val hostColor = snap.getString(FS.F_HOST_COLOR)
+                    ?.let { runCatching { Player.valueOf(it) }.getOrNull() }
+                    ?: Player.BLACK
+                val mine = if (snap.getString(FS.F_HOST_UID) == me.id.value) hostColor else hostColor.opponent()
+                tx.update(
+                    roomDoc,
+                    mapOf(
+                        FS.F_RESIGNED_BY to mine.name,
+                        FS.F_RESIGNED_ROUND to current,
+                        FS.F_EXPIRES_AT to FS.ttlFromNow(),
+                    ),
+                )
+                null
+            }.await()
+        } catch (t: Throwable) {
+            throw t.asOnlineError()
+        }
+    }
+
     override suspend fun finish() {
         // Tear listeners down first so the subsequent delete doesn't bounce
         // a "doc no longer exists" ABANDONED snapshot into the UI.
@@ -194,6 +222,12 @@ internal class FirebaseOnlineSession(
         val round = snap.getLong(FS.F_ROUND)?.toInt() ?: 0
         val rematchHost = snap.getBoolean(FS.F_REMATCH_HOST) == true
         val rematchGuest = snap.getBoolean(FS.F_REMATCH_GUEST) == true
+        // Only a resignation of this round counts; a rematch leaves the old one behind.
+        val resignedBy = if (snap.getLong(FS.F_RESIGNED_ROUND)?.toInt() == round) {
+            snap.getString(FS.F_RESIGNED_BY)?.let { runCatching { Player.valueOf(it) }.getOrNull() }
+        } else {
+            null
+        }
         val isHost = me.id.value == hostUid
 
         val myColor = when (me.id.value) {
@@ -216,6 +250,7 @@ internal class FirebaseOnlineSession(
                 moves = movesFor(round),
                 rematchRequestedByMe = if (isHost) rematchHost else rematchGuest,
                 rematchRequestedByOpponent = if (isHost) rematchGuest else rematchHost,
+                resignedBy = resignedBy,
             )
         }
     }

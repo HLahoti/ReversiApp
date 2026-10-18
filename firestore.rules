@@ -37,6 +37,11 @@ service cloud.firestore {
     // A game is at most 60 placements plus passes; well under this.
     function maxSeq() { return 200; }
 
+    function myColor(r) { return isHost(r) ? r.hostColor : (r.hostColor == 'BLACK' ? 'WHITE' : 'BLACK'); }
+    // resignedBy/resignedRound are absent until someone resigns, and only
+    // count for the round they name, so a rematch needn't clear them.
+    function resignedThisRound(r) { return r.get('resignedRound', -1) == r.round; }
+
     function myFlag(r) { return isHost(r) ? 'rematchHost' : 'rematchGuest'; }
     function otherFlag(r) { return isHost(r) ? 'rematchGuest' : 'rematchHost'; }
 
@@ -82,7 +87,7 @@ service cloud.firestore {
     // Half of sendMove's batch: moveCount advances by one, and only together
     // with the move doc for that seq.
     function isMoveBump(code, r, n) {
-      return isMember(r) && r.status == 'active'
+      return isMember(r) && r.status == 'active' && !resignedThisRound(r)
         && changed().hasOnly(['moveCount', 'expiresAt'])
         && n.moveCount == r.moveCount + 1
         && existsAfter(/databases/$(db)/documents/rooms/$(code)/moves/$(moveId(r.round, n.moveCount)));
@@ -93,6 +98,14 @@ service cloud.firestore {
       return isMember(r) && r.status == 'active'
         && changed().hasOnly([myFlag(r), 'expiresAt'])
         && n[myFlag(r)] == true;
+    }
+
+    // A player resigns the current round, as their own colour, once.
+    function isResign(r, n) {
+      return isMember(r) && r.status == 'active' && !resignedThisRound(r)
+        && changed().hasOnly(['resignedBy', 'resignedRound', 'expiresAt'])
+        && n.resignedBy == myColor(r)
+        && n.resignedRound == r.round;
     }
 
     // The second "Play again" starts the next round: colours swap, flags and
@@ -112,7 +125,7 @@ service cloud.firestore {
     // The other half of sendMove's batch. `r` is the room before the batch,
     // `a` the room after it.
     function validNewMove(id, r, a, m) {
-      return isMember(r) && r.status == 'active'
+      return isMember(r) && r.status == 'active' && !resignedThisRound(r)
         && m.keys().hasOnly(moveKeys()) && m.keys().hasAll(moveKeys())
         && m.round == r.round
         && m.seq == r.moveCount + 1 && m.seq <= maxSeq()
@@ -142,6 +155,7 @@ service cloud.firestore {
         || isMoveBump(code, resource.data, request.resource.data)
         || isRematchRequest(resource.data, request.resource.data)
         || isRematchStart(resource.data, request.resource.data)
+        || isResign(resource.data, request.resource.data)
       );
 
       allow delete: if isMember(resource.data);
