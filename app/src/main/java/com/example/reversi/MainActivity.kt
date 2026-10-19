@@ -214,9 +214,17 @@ class MainActivity : ComponentActivity() {
                             if (online?.opponentLeft == true) leave() else confirmLeave = true
                         }
                         BackHandler { requestLeave() }
+                        // Follow the view-model, since a rematch swaps colours.
+                        val players by vm.players.collectAsState()
+                        val localColor = when (Participant.REMOTE) {
+                            players.white -> Player.BLACK
+                            players.black -> Player.WHITE
+                            else -> null // not configured yet
+                        }
                         GameScreen(
                             vm,
-                            title = "Online",
+                            title = if (localColor == null) "Online"
+                            else "Online · you are ${localColor.name.lowercase()}",
                             onBack = { requestLeave() },
                         )
                         if (confirmLeave) {
