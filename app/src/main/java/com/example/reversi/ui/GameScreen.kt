@@ -78,11 +78,13 @@ fun GameScreen(
     val hint by vm.hint.collectAsState()
     val botName by vm.botName.collectAsState()
     val hintsOff by UserSettings.hintsOff.collectAsState()
+    val takebacksOff by UserSettings.takebacksOff.collectAsState()
     val haptics = rememberHaptics()
     var paused by remember { mutableStateOf(false) }
     var confirmReset by remember { mutableStateOf(false) }
     var confirmResign by remember { mutableStateOf(false) }
     var confirmHintsOn by remember { mutableStateOf(false) }
+    var confirmTakebacksOn by remember { mutableStateOf(false) }
     val gameOver = state.isTerminal || resigned != null
     // Online and vs-bot have one human seat to resign; pass-and-play has two.
     val canResign = !gameOver && when (val o = online) {
@@ -91,6 +93,8 @@ fun GameScreen(
     }
     val vsBot = online == null &&
         (players.black == Participant.BOT || players.white == Participant.BOT)
+    // Looking back at an earlier position with takebacks off: browse only.
+    val rewoundNoTakebacks = vsBot && takebacksOff && viewingIndex < log.size - 1
     // Who "your opponent" is, where there is one: the online player or the bot.
     val opponentName = online?.opponentName ?: botName
 
@@ -140,10 +144,15 @@ fun GameScreen(
                         state = state,
                         flips = flips,
                         showHints = !thinking && !animating && resigned == null &&
-                            players.of(state.toMove) == Participant.HUMAN,
+                            players.of(state.toMove) == Participant.HUMAN && !rewoundNoTakebacks,
                         hint = hint,
                         openingFrame = openingFrame,
                         onTap = { x, y ->
+                            if (rewoundNoTakebacks) {
+                                haptics.tap()
+                                confirmTakebacksOn = true
+                                return@BoardView
+                            }
                             val mv = com.example.reversi.game.Move(x, y)
                             val accepted = !animating && !thinking &&
                                 state.board.isLegal(mv, state.toMove)
@@ -205,7 +214,7 @@ fun GameScreen(
                             Text("${o.opponentSubject} left the game.", color = Felt.OnDark)
                         }
                     } else if (state.legalMoves.isEmpty() &&
-                        players.of(state.toMove) == Participant.HUMAN
+                        players.of(state.toMove) == Participant.HUMAN && !rewoundNoTakebacks
                     ) {
                         GlassPanel(Modifier.fillMaxWidth()) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -272,6 +281,34 @@ fun GameScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { haptics.tap(); confirmReset = false }) { Text("Cancel") }
+                },
+            )
+        }
+
+        if (confirmTakebacksOn) {
+            AlertDialog(
+                onDismissRequest = { confirmTakebacksOn = false },
+                title = { Text("Turn takebacks on?") },
+                text = {
+                    Text(
+                        "Takebacks are turned off in Settings, so you can look back through the game " +
+                            "but not play on from an earlier move. Turn them back on for all games?",
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        haptics.confirm()
+                        confirmTakebacksOn = false
+                        UserSettings.setTakebacksOff(false)
+                    }) { Text("Turn on") }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        haptics.tap()
+                        confirmTakebacksOn = false
+                        // Back to the live position, where play carries on.
+                        vm.jumpTo(log.size - 1)
+                    }) { Text("Back to game") }
                 },
             )
         }

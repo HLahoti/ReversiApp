@@ -11,12 +11,20 @@ object UserSettings {
     private const val PREFS = "settings"
     private const val K_HINTS_OFF = "hintsOff"
     private const val K_OPENING_ANIMATION = "openingAnimation"
+    private const val K_TAKEBACKS_OFF = "takebacksOff"
 
     private lateinit var prefs: SharedPreferences
 
     private val _hintsOff = MutableStateFlow(false)
     /** True when the hint bulb is turned off in vs-bot games. */
     val hintsOff: StateFlow<Boolean> = _hintsOff.asStateFlow()
+
+    private val _takebacksOff = MutableStateFlow(false)
+    /**
+     * True when vs-bot games can't be played on from an earlier move: the
+     * move log can still be browsed, but only the latest position is live.
+     */
+    val takebacksOff: StateFlow<Boolean> = _takebacksOff.asStateFlow()
 
     private val _openingAnimation = MutableStateFlow(true)
     /** True when a new game opens with the game-start intro. On by default. */
@@ -27,11 +35,17 @@ object UserSettings {
         prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         _hintsOff.value = prefs.getBoolean(K_HINTS_OFF, false)
         _openingAnimation.value = prefs.getBoolean(K_OPENING_ANIMATION, true)
+        _takebacksOff.value = prefs.getBoolean(K_TAKEBACKS_OFF, false)
     }
 
     fun setHintsOff(off: Boolean) {
         _hintsOff.value = off
         prefs.edit().putBoolean(K_HINTS_OFF, off).apply()
+    }
+
+    fun setTakebacksOff(off: Boolean) {
+        _takebacksOff.value = off
+        prefs.edit().putBoolean(K_TAKEBACKS_OFF, off).apply()
     }
 
     fun setOpeningAnimation(on: Boolean) {

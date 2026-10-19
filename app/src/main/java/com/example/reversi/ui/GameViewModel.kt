@@ -589,8 +589,11 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         for (i in 0..index) s = s.play(moves[i]) ?: return
         _state.value = s
         _viewingIndex.value = index
-        // No maybeRunBot(): the player drives from here. A new tap/pass
-        // commits the branch; otherwise they are free to keep browsing.
+        // Back at the latest position, the game carries on, so it's the
+        // bot's move if it was about to play when the player looked back.
+        // Anywhere earlier the player drives: a new tap/pass commits the
+        // branch; otherwise they are free to keep browsing.
+        if (index == moves.size - 1) maybeRunBot()
     }
 
     /**
@@ -648,7 +651,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun onTapCell(x: Int, y: Int) {
-        if (isReplay) return
+        if (isReplay || takebackBlocked()) return
         if (_resigned.value != null) return
         if (_botThinking.value) return
         if (_animating.value) return
@@ -661,7 +664,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun passTurn() {
-        if (isReplay) return
+        if (isReplay || takebackBlocked()) return
         if (_resigned.value != null) return
         val cur = _state.value
         if (cur.legalMoves.isNotEmpty()) return
@@ -723,6 +726,14 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             maybeRunBot()
         }
     }
+
+    /**
+     * The board shows an earlier position of a vs-bot game and takebacks are
+     * turned off in Settings, so it can be looked at but not played from.
+     */
+    fun takebackBlocked(): Boolean =
+        mode == SavedMode.VS_BOT && UserSettings.takebacksOff.value &&
+            _viewingIndex.value < moves.size - 1
 
     /** If the player is viewing a historical state, drop every ply after it. */
     private fun truncateToViewing() {

@@ -114,6 +114,7 @@ private fun GameplaySection() {
     val haptics = rememberHaptics()
     val hintsOff by UserSettings.hintsOff.collectAsState()
     val openingAnimation by UserSettings.openingAnimation.collectAsState()
+    val takebacksOff by UserSettings.takebacksOff.collectAsState()
 
     SectionTitle("Gameplay")
     GlassPanel(Modifier.fillMaxWidth()) {
@@ -123,6 +124,14 @@ private fun GameplaySection() {
                 description = "The hint bulb stays off in games against the bot.",
                 checked = hintsOff,
                 onCheckedChange = { haptics.tap(); UserSettings.setHintsOff(it) },
+            )
+            Spacer(Modifier.height(16.dp))
+            SettingRow(
+                title = "Turn off takebacks",
+                description = "In games against the bot you can still look back through the moves, " +
+                    "but not play on from an earlier one.",
+                checked = takebacksOff,
+                onCheckedChange = { haptics.tap(); UserSettings.setTakebacksOff(it) },
             )
             Spacer(Modifier.height(16.dp))
             SettingRow(
