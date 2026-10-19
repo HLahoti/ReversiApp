@@ -43,6 +43,7 @@ import com.example.reversi.ui.OnlineLobbyScreen
 import com.example.reversi.ui.ReversiTheme
 import com.example.reversi.ui.SettingsScreen
 import com.example.reversi.ui.HistoryScreen
+import com.example.reversi.ui.ReplayScreen
 import com.example.reversi.update.GitHubReleaseChecker
 import com.example.reversi.update.Updates
 import com.example.reversi.ui.Participant
@@ -123,7 +124,17 @@ class MainActivity : ComponentActivity() {
                         SettingsScreen(onBack = { nav.popBackStack() })
                     }
                     composable("history") {
-                        HistoryScreen(onBack = { nav.popBackStack() })
+                        HistoryScreen(
+                            onBack = { nav.popBackStack() },
+                            onReplay = { id -> nav.navigate("history/$id") },
+                        )
+                    }
+                    composable(
+                        route = "history/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.StringType }),
+                    ) { entry ->
+                        val id = entry.arguments?.getString("id") ?: return@composable
+                        ReplayScreen(entryId = id, onBack = { nav.popBackStack() })
                     }
                     composable("howto") {
                         HowToPlayScreen(onBack = { nav.popBackStack() })

@@ -120,6 +120,14 @@ object AppConfig {
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // Replaying a finished game from the history
+    // ─────────────────────────────────────────────────────────────────────
+    object Replay {
+        /** Pause between plies when a replay plays itself, after each move's flips settle. */
+        const val STEP_MS: Long = 700L
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // Game-start intro animation
     // ─────────────────────────────────────────────────────────────────────
     object OpeningAnimation {

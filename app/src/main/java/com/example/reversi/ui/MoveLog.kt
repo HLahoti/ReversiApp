@@ -44,7 +44,12 @@ fun MoveLog(
 ) {
     val listState = rememberLazyListState()
     LaunchedEffect(entries.size, currentIndex) {
-        val target = if (currentIndex in entries.indices) currentIndex else entries.lastIndex
+        // -1 is the opening position, before the first entry (a replay's start).
+        val target = when {
+            currentIndex in entries.indices -> currentIndex
+            currentIndex < 0 -> 0
+            else -> entries.lastIndex
+        }
         if (target >= 0) listState.animateScrollToItem(target)
     }
     LazyRow(

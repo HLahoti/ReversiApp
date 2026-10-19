@@ -45,6 +45,12 @@ data class HistoryEntry(
     val updatedAt: Long,
     /** When it was completed or abandoned; null while in progress. */
     val endedAt: Long? = null,
+    /**
+     * Every ply of a completed game, in [HistoryMoves] form, for replaying
+     * it. Null for unfinished games and for games recorded before moves were
+     * kept.
+     */
+    val moves: String? = null,
 ) {
     val opponentColor: Player get() = myColor.opponent()
 

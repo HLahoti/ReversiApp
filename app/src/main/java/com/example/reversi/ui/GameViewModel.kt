@@ -19,6 +19,7 @@ import com.example.reversi.game.Move
 import com.example.reversi.game.Player
 import com.example.reversi.history.HistoryEntry
 import com.example.reversi.history.HistoryMode
+import com.example.reversi.history.HistoryMoves
 import com.example.reversi.history.HistoryOutcome
 import com.example.reversi.history.HistoryRegistry
 import com.example.reversi.history.HistoryStatus
@@ -124,6 +125,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private val _hint = MutableStateFlow<Move?>(null)
     val hint: StateFlow<Move?> = _hint.asStateFlow()
 
+    /** True while a replay is stepping through its moves by itself. */
+    private val _replayPlaying = MutableStateFlow(false)
+    val replayPlaying: StateFlow<Boolean> = _replayPlaying.asStateFlow()
+
     /** Null when playing offline; populated in online mode. */
     private val _online = MutableStateFlow<OnlineUiState?>(null)
     val online: StateFlow<OnlineUiState?> = _online.asStateFlow()
@@ -132,6 +137,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private var hintJob: Job? = null
     private var openingJob: Job? = null
     private var sessionJob: Job? = null
+    private var replayJob: Job? = null
     private var bot: BotPlayer? = null
     private var opponent: Opponent? = null
 
@@ -149,6 +155,13 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
      * before then, and always for two-player games, which aren't recorded.
      */
     private var historyId: String? = null
+
+    /**
+     * Showing a finished game from the history: [moves] holds the whole game
+     * and the board steps through it, but nothing can be played, saved or
+     * recorded.
+     */
+    private var isReplay = false
 
     // ── Online-mode fields ────────────────────────────────────────────────
     /**
@@ -199,20 +212,101 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         setOpponent(opponent ?: Opponent.fromSaved(saved.difficulty))
         resetInternal()
         historyId = saved.historyId
+        _state.value = loadMoves(saved.moves.map { if (it.isPass) Move.PASS else Move(it.x, it.y) })
+        _viewingIndex.value = moves.size - 1
+        maybeRunBot()
+    }
+
+    /**
+     * Show [record], a finished game from the history, to step through.
+     * The board starts at the opening position with the whole game in the
+     * move log; [stepReplay], [replayTo] and [toggleReplayPlay] move through
+     * it. Taps, passes and everything else that would change the game are
+     * ignored.
+     */
+    fun configureReplay(record: List<Move>) {
+        isReplay = true
+        mode = null
+        _players.value = Players(Participant.REMOTE, Participant.REMOTE)
+        resetInternal()
+        loadMoves(record)
+        _state.value = GameState()
+        _viewingIndex.value = -1
+    }
+
+    /**
+     * One ply forward, with the usual flip animation, or one back. Ignored
+     * while a flip is still playing out, so taps can't outrun the board.
+     */
+    fun stepReplay(forward: Boolean) {
+        if (!isReplay || _animating.value) return
+        stopReplayPlay()
+        if (forward) stepReplayForward() else replayTo(_viewingIndex.value - 1)
+    }
+
+    /** Jump straight to the position after ply [index]; -1 is the opening position. */
+    fun replayTo(index: Int) {
+        if (!isReplay) return
+        stopReplayPlay()
+        if (index !in -1 until moves.size) return
+        _flips.value = FlipAnimations()
+        _animating.value = false
+        var s = GameState()
+        for (i in 0..index) s = s.play(moves[i]) ?: return
+        _state.value = s
+        _viewingIndex.value = index
+    }
+
+    /** Play the rest of the game by itself (from the start if at the end), or stop. */
+    fun toggleReplayPlay() {
+        if (!isReplay) return
+        if (_replayPlaying.value) {
+            stopReplayPlay()
+            return
+        }
+        if (_viewingIndex.value >= moves.size - 1) replayTo(-1)
+        _replayPlaying.value = true
+        replayJob = viewModelScope.launch {
+            while (_viewingIndex.value < moves.size - 1) {
+                delay(stepReplayForward() + AppConfig.Replay.STEP_MS)
+            }
+            _replayPlaying.value = false
+        }
+    }
+
+    private fun stopReplayPlay() {
+        replayJob?.cancel()
+        replayJob = null
+        _replayPlaying.value = false
+    }
+
+    /** Animate the next ply of the replay onto the board; returns how long its flips take. */
+    private fun stepReplayForward(): Long {
+        val i = _viewingIndex.value + 1
+        if (i >= moves.size) return 0L
+        val move = moves[i]
+        val next = _state.value.play(move) ?: return 0L
+        _state.value = next
+        _viewingIndex.value = i
+        return animateFlips(move, next) {}
+    }
+
+    /**
+     * Fill [moves] and the move log from [record], stopping at the first
+     * illegal ply, and return the position after the last one.
+     */
+    private fun loadMoves(record: List<Move>): GameState {
         var s = GameState()
         val entries = mutableListOf<MoveLogEntry>()
-        for (m in saved.moves) {
+        for (mv in record) {
             val mover = s.toMove
-            val mv = if (m.isPass) Move.PASS else Move(m.x, m.y)
             val next = s.play(mv) ?: break
             moves.add(mv)
             entries += MoveLogEntry(labelFor(mv), mover, next.blackCount, next.whiteCount)
             s = next
         }
-        _state.value = s
         _log.value = entries
-        _viewingIndex.value = moves.size - 1
-        maybeRunBot()
+        return s
     }
 
     /**
@@ -295,7 +389,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
      * pass-and-play, where there is no single human seat.
      */
     fun resign() {
-        if (isGameOver()) return
+        if (isReplay || isGameOver()) return
         if (isOnline) {
             val s = session ?: return
             val me = localColor ?: return
@@ -329,7 +423,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
      * the bot's own turn, so it picks the move it would make there.
      */
     fun requestHint() {
-        if (isOnline || isGameOver()) return
+        if (isOnline || isReplay || isGameOver()) return
         val human = humanColorIn(_players.value) ?: return
         if (_botThinking.value || _animating.value || hintJob?.isActive == true) return
         val cur = _state.value
@@ -465,6 +559,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
      * rewound unilaterally.
      */
     fun jumpTo(index: Int) {
+        if (isReplay) return replayTo(index)
         if (isOnline) return
         if (index < 0 || index >= moves.size) return
         if (index == _viewingIndex.value) return
@@ -486,6 +581,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
      * agree, so this asks for a rematch instead.
      */
     fun resetGame() {
+        if (isReplay) return
         if (isOnline) {
             requestRematch()
             return
@@ -503,6 +599,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
      * room's colours once both players agree.
      */
     fun playAgain() {
+        if (isReplay) return
         if (isOnline) {
             requestRematch()
             return
@@ -517,7 +614,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
      * (no moves yet, or the game is already over). No-op online.
      */
     fun persist() {
-        if (isOnline) return
+        if (isOnline || isReplay) return
         val m = mode ?: return
         if (moves.isEmpty() || isGameOver()) {
             store.clear(m, slotOpponent())
@@ -534,6 +631,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun onTapCell(x: Int, y: Int) {
+        if (isReplay) return
         if (_resigned.value != null) return
         if (_botThinking.value) return
         if (_animating.value) return
@@ -546,6 +644,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun passTurn() {
+        if (isReplay) return
         if (_resigned.value != null) return
         val cur = _state.value
         if (cur.legalMoves.isNotEmpty()) return
@@ -563,6 +662,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun resetInternal() {
         botJob?.cancel()
+        stopReplayPlay()
         clearHint()
         openingJob?.cancel()
         _openingFrame.value = null
@@ -660,6 +760,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 startedAt = now,
                 updatedAt = now,
                 endedAt = if (outcome == null) null else now,
+                moves = if (outcome == null) null else HistoryMoves.encode(moves),
             ),
         )
     }
@@ -690,6 +791,15 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         moves.add(move)
         appendLog(move, mover, next)
         if (broadcast) broadcastIfOnline(mover, move)
+        animateFlips(move, next) { maybeRunBot() }
+    }
+
+    /**
+     * Run [move]'s flip animation, now on the board as [next], rippling out
+     * from the placed disc; [onDone] runs once it has played out (at once if
+     * nothing flipped). Returns how long it takes.
+     */
+    private fun animateFlips(move: Move, next: GameState, onDone: () -> Unit): Long {
         val anim = AppConfig.Animation
         var totalMs = 0L
         if (next.lastFlips.isNotEmpty()) {
@@ -720,11 +830,12 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                     prev.copy(running = running)
                 }
                 _animating.value = false
-                maybeRunBot()
+                onDone()
             }
         } else {
-            maybeRunBot()
+            onDone()
         }
+        return totalMs
     }
 
     /** Fire-and-forget send of a locally-applied move to the room. */
@@ -745,7 +856,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun maybeRunBot() {
-        if (_resigned.value != null) return
+        if (isReplay || _resigned.value != null) return
         val cur = _state.value
         if (cur.isTerminal) {
             reportFinishedGame()

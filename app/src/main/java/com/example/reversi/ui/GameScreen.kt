@@ -119,7 +119,7 @@ fun GameScreen(
                         .windowInsetsPadding(WindowInsets.safeDrawing)
                         .padding(horizontal = 16.dp),
                 ) {
-                    TopBar(
+                    GameTopBar(
                         title = title,
                         onBack = { haptics.tap(); onBack() },
                     )
@@ -321,7 +321,7 @@ private fun PausedOverlay(onResume: () -> Unit) {
 }
 
 @Composable
-private fun TopBar(
+internal fun GameTopBar(
     title: String,
     onBack: () -> Unit,
 ) {
@@ -399,7 +399,7 @@ private fun GameControls(
 }
 
 @Composable
-private fun ScoreBar(
+internal fun ScoreBar(
     black: Int,
     white: Int,
     toMove: Player,

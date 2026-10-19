@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -59,9 +60,12 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-/** Past vs-bot and online games, newest first, with filters. */
+/**
+ * Past vs-bot and online games, newest first, with filters. Completed games
+ * whose moves were kept open in a replay through [onReplay].
+ */
 @Composable
-fun HistoryScreen(onBack: () -> Unit) {
+fun HistoryScreen(onBack: () -> Unit, onReplay: (entryId: String) -> Unit) {
     val haptics = rememberHaptics()
     val all by HistoryRegistry.current.entries.collectAsState()
     val selfLabel = ProfileRegistry.current.selfLabel
@@ -186,7 +190,15 @@ fun HistoryScreen(onBack: () -> Unit) {
                     } else {
                         LazyColumn {
                             items(shown, key = { it.id }) { e ->
-                                EntryRow(e, selfLabel)
+                                EntryRow(
+                                    e,
+                                    selfLabel,
+                                    onClick = if (e.moves != null) {
+                                        { haptics.tap(); onReplay(e.id) }
+                                    } else {
+                                        null
+                                    },
+                                )
                                 HorizontalDivider(color = Felt.GlassBorder.copy(alpha = 0.4f))
                             }
                         }
@@ -199,6 +211,8 @@ fun HistoryScreen(onBack: () -> Unit) {
 
 private val DateColumn = 76.dp
 private val ResultColumn = 88.dp
+/** Room for the replay chevron, kept on every row so the columns line up. */
+private val ChevronColumn = 18.dp
 
 @Composable
 private fun HeaderRow() {
@@ -218,6 +232,7 @@ private fun HeaderRow() {
             HeaderText("White")
         }
         HeaderText("Result", Modifier.width(ResultColumn))
+        Spacer(Modifier.width(ChevronColumn))
     }
 }
 
@@ -226,14 +241,18 @@ private fun HeaderText(text: String, modifier: Modifier = Modifier) {
     Text(text, color = Felt.OnDarkDim, fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = modifier)
 }
 
+/** One game; tappable to replay it when [onClick] is set. */
 @Composable
-private fun EntryRow(e: HistoryEntry, selfLabel: String) {
+private fun EntryRow(e: HistoryEntry, selfLabel: String, onClick: (() -> Unit)?) {
     val ctx = LocalContext.current
     val opponent = e.opponentName ?: if (e.mode == HistoryMode.ONLINE) "Online player" else "Bot"
     val kind = if (e.mode == HistoryMode.BOT) "bot" else "online"
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Column(Modifier.width(DateColumn)) {
             val (day, time) = formatWhen(ctx, e.lastActivity)
@@ -259,6 +278,16 @@ private fun EntryRow(e: HistoryEntry, selfLabel: String) {
                 fontSize = 11.sp,
                 maxLines = 1,
             )
+        }
+        Box(Modifier.width(ChevronColumn), contentAlignment = Alignment.CenterEnd) {
+            if (onClick != null) {
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = "Replay",
+                    tint = Felt.OnDarkDim,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
         }
     }
 }
