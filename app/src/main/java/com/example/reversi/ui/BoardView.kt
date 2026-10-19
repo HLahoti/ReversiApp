@@ -299,7 +299,7 @@ private fun OpeningFrame(frame: Int, sizeDp: Dp) {
 enum class FlipDir { B_TO_W, W_TO_B }
 
 @Composable
-private fun FlippingPiece(dir: FlipDir, startDelayMs: Long, sizeDp: Dp) {
+internal fun FlippingPiece(dir: FlipDir, startDelayMs: Long, sizeDp: Dp) {
     val anim = AppConfig.Animation
     // Frame 1 is the pre-flip pose, so holding it during the ripple delay
     // keeps the cell showing its original colour until its turn comes up.

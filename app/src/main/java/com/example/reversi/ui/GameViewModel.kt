@@ -13,6 +13,7 @@ import com.example.reversi.data.GameStore
 import com.example.reversi.data.SavedGame
 import com.example.reversi.data.SavedMode
 import com.example.reversi.data.SavedMove
+import com.example.reversi.data.UserSettings
 import com.example.reversi.game.GameState
 import com.example.reversi.game.Move
 import com.example.reversi.game.Player
@@ -544,10 +545,17 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * Play the game-start intro frames, then hand off to normal play.
      * The opening animation reuses [_animating] to gate taps and the bot
-     * until the board has settled into its starting position.
+     * until the board has settled into its starting position. Skipped
+     * straight to normal play when the intro is turned off in Settings.
      */
     private fun playOpening() {
         openingJob?.cancel()
+        if (!UserSettings.openingAnimation.value) {
+            _openingFrame.value = null
+            _animating.value = false
+            maybeRunBot()
+            return
+        }
         val cfg = AppConfig.OpeningAnimation
         _animating.value = true
         _openingFrame.value = 1

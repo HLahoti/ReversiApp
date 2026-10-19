@@ -25,6 +25,7 @@ import androidx.navigation.navArgument
 import com.example.reversi.bot.Opponent
 import com.example.reversi.data.GameStore
 import com.example.reversi.data.SavedMode
+import com.example.reversi.data.UserSettings
 import com.example.reversi.game.Player
 import com.example.reversi.net.OnlineRegistry
 import com.example.reversi.net.SessionHandoff
@@ -66,6 +67,8 @@ class MainActivity : ComponentActivity() {
             installedVersion = BuildConfig.VERSION_NAME,
         )
         lifecycleScope.launch { Updates.checkIfDue() }
+
+        UserSettings.install(this)
 
         enableEdgeToEdge()
         setContent {

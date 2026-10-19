@@ -56,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.reversi.config.AppConfig
+import com.example.reversi.data.UserSettings
 import com.example.reversi.game.Player
 
 @Composable
@@ -75,10 +76,12 @@ fun GameScreen(
     val online by vm.online.collectAsState()
     val resigned by vm.resigned.collectAsState()
     val hint by vm.hint.collectAsState()
+    val hintsOff by UserSettings.hintsOff.collectAsState()
     val haptics = rememberHaptics()
     var paused by remember { mutableStateOf(false) }
     var confirmReset by remember { mutableStateOf(false) }
     var confirmResign by remember { mutableStateOf(false) }
+    var confirmHintsOn by remember { mutableStateOf(false) }
     val gameOver = state.isTerminal || resigned != null
     // Online and vs-bot have one human seat to resign; pass-and-play has two.
     val canResign = !gameOver && when (val o = online) {
@@ -164,13 +167,17 @@ fun GameScreen(
                                 null
                             },
                             onHint = if (vsBot) {
-                                { haptics.tap(); vm.requestHint() }
+                                {
+                                    haptics.tap()
+                                    if (hintsOff) confirmHintsOn = true else vm.requestHint()
+                                }
                             } else {
                                 null
                             },
                             hintEnabled = !thinking && !animating && hint == null &&
                                 players.of(state.toMove) == Participant.HUMAN &&
                                 state.legalMoves.isNotEmpty(),
+                            hintsOff = hintsOff,
                             // Nothing to reset or resign before the first move.
                             started = log.isNotEmpty(),
                         )
@@ -260,6 +267,24 @@ fun GameScreen(
                 },
             )
         }
+
+        if (confirmHintsOn) {
+            AlertDialog(
+                onDismissRequest = { confirmHintsOn = false },
+                title = { Text("Turn hints on?") },
+                text = { Text("Hints are turned off in Settings. Turn them back on for all games?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        haptics.confirm()
+                        confirmHintsOn = false
+                        UserSettings.setHintsOff(false)
+                    }) { Text("Turn on") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { haptics.tap(); confirmHintsOn = false }) { Text("Keep off") }
+                },
+            )
+        }
     }
 }
 
@@ -319,7 +344,8 @@ private fun TopBar(
  * Pause, reset, resign and hint, in a row under the board; only shown while
  * the game is in progress. [onReset] is null online; [onResign] is null in
  * pass-and-play; [onHint] is null outside vs-bot games. Reset and resign are
- * disabled until [started].
+ * disabled until [started]. With [hintsOff] the hint bulb looks disabled but
+ * still takes taps, so [onHint] can offer to turn hints back on.
  */
 @Composable
 private fun GameControls(
@@ -328,6 +354,7 @@ private fun GameControls(
     onResign: (() -> Unit)?,
     onHint: (() -> Unit)?,
     hintEnabled: Boolean,
+    hintsOff: Boolean,
     started: Boolean,
 ) {
     Row(
@@ -357,11 +384,11 @@ private fun GameControls(
             }
         }
         if (onHint != null) {
-            IconButton(onClick = onHint, enabled = hintEnabled) {
+            IconButton(onClick = onHint, enabled = hintsOff || hintEnabled) {
                 Icon(
                     Icons.Default.Lightbulb,
-                    contentDescription = "Hint",
-                    tint = if (hintEnabled) Felt.OnDark else Felt.OnDarkDim,
+                    contentDescription = if (hintsOff) "Hints off" else "Hint",
+                    tint = if (hintEnabled && !hintsOff) Felt.OnDark else Felt.OnDarkDim,
                 )
             }
         }
