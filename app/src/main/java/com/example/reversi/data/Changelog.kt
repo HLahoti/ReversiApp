@@ -13,6 +13,19 @@ object Changelog {
 
     val entries: List<Entry> = listOf(
         Entry(
+            version = "1.7",
+            title = "Game history, replays and online names",
+            changes = listOf(
+                "History, on the home screen, lists your games against the bots and online: who played which colour, the result and when. Filter by result, opponent, colour and more.",
+                "Tap a finished game in History to replay it move by move, or let it play itself.",
+                "History marks the games where you used hints or took moves back.",
+                "Pick a name before playing online. Your opponent sees it, and you're warned if you both have the same one.",
+                "Game titles and results name your opponent and show your colour, online and against the bots.",
+                "New settings to turn off hints, takebacks and the game start animation.",
+                "History, How to play and Settings now sit in one bar of icons on the home screen.",
+            ),
+        ),
+        Entry(
             version = "1.6",
             title = "Resign, hints and update alerts",
             changes = listOf(
