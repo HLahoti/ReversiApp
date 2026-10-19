@@ -129,6 +129,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private val _replayPlaying = MutableStateFlow(false)
     val replayPlaying: StateFlow<Boolean> = _replayPlaying.asStateFlow()
 
+    /** The bot being played, for naming it on screen; null outside vs-bot games. */
+    private val _botName = MutableStateFlow<String?>(null)
+    val botName: StateFlow<String?> = _botName.asStateFlow()
+
     /** Null when playing offline; populated in online mode. */
     private val _online = MutableStateFlow<OnlineUiState?>(null)
     val online: StateFlow<OnlineUiState?> = _online.asStateFlow()
@@ -548,6 +552,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             opponent = o
             bot = null
         }
+        _botName.value = if (mode == SavedMode.VS_BOT) slotOpponent().displayName else null
     }
 
     /**

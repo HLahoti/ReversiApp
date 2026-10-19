@@ -76,6 +76,7 @@ fun GameScreen(
     val online by vm.online.collectAsState()
     val resigned by vm.resigned.collectAsState()
     val hint by vm.hint.collectAsState()
+    val botName by vm.botName.collectAsState()
     val hintsOff by UserSettings.hintsOff.collectAsState()
     val haptics = rememberHaptics()
     var paused by remember { mutableStateOf(false) }
@@ -90,6 +91,8 @@ fun GameScreen(
     }
     val vsBot = online == null &&
         (players.black == Participant.BOT || players.white == Participant.BOT)
+    // Who "your opponent" is, where there is one: the online player or the bot.
+    val opponentName = online?.opponentName ?: botName
 
     // Save on app pause / background and again when the screen is torn down
     // (back arrow, system back, or navigating away). persist() internally
@@ -192,6 +195,8 @@ fun GameScreen(
                             resigned = resigned,
                             resignedByMe = resigned?.let { players.of(it) == Participant.HUMAN } == true,
                             online = o,
+                            vsOpponent = o != null || vsBot,
+                            opponentName = opponentName,
                             myColor = if (players.black == Participant.HUMAN) Player.BLACK else Player.WHITE,
                             onPlayAgain = { haptics.confirm(); vm.playAgain() },
                         )
@@ -238,7 +243,7 @@ fun GameScreen(
                 onDismissRequest = { confirmResign = false },
                 title = { Text("Resign game?") },
                 text = {
-                    Text("You'll forfeit this game and ${online.opponentObject} wins. This can't be undone.")
+                    Text("You'll forfeit this game and ${opponentName ?: "your opponent"} wins. This can't be undone.")
                 },
                 confirmButton = {
                     TextButton(onClick = {
@@ -474,19 +479,28 @@ private fun EndGamePanel(
     resigned: Player?,
     resignedByMe: Boolean,
     online: OnlineUiState?,
-    /** The local player's colour; only read online, where results name the players. */
+    /**
+     * Played against one opponent (online or a bot), so the result names
+     * "you" and [opponentName] rather than the colours, as pass-and-play does.
+     */
+    vsOpponent: Boolean,
+    opponentName: String?,
+    /** The local player's colour; only read when [vsOpponent]. */
     myColor: Player,
     onPlayAgain: () -> Unit,
 ) {
     val mine = if (myColor == Player.BLACK) black else white
     val theirs = if (myColor == Player.BLACK) white else black
     val msg = when {
-        online != null -> when {
-            resigned != null && resignedByMe -> "${online.opponentSubject} wins · you resigned"
-            resigned != null -> "You win · ${online.opponentObject} resigned"
-            mine > theirs -> "You win · $mine – $theirs"
-            theirs > mine -> "${online.opponentSubject} wins · $theirs – $mine"
-            else -> "Draw · $black – $white"
+        vsOpponent -> {
+            val them = opponentName ?: "Your opponent"
+            when {
+                resigned != null && resignedByMe -> "$them wins · you resigned"
+                resigned != null -> "You win · ${opponentName ?: "your opponent"} resigned"
+                mine > theirs -> "You win · $mine – $theirs"
+                theirs > mine -> "$them wins · $theirs – $mine"
+                else -> "Draw · $black – $white"
+            }
         }
         resigned != null -> {
             val winner = if (resigned == Player.BLACK) "White" else "Black"
