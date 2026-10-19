@@ -32,14 +32,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
@@ -398,23 +403,39 @@ private fun ModePicker(
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(12.dp))
-        SecondaryButton(
-            text = "History",
-            onClick = onHistory,
+        IconBar(
+            items = listOf(
+                Triple(Icons.Default.History, "History", onHistory),
+                Triple(Icons.AutoMirrored.Filled.HelpOutline, "How to play", onHowToPlay),
+                Triple(Icons.Default.Settings, "Settings", onSettings),
+            ),
             modifier = Modifier.fillMaxWidth(),
         )
-        Spacer(Modifier.height(12.dp))
-        SecondaryButton(
-            text = "How to play",
-            onClick = onHowToPlay,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(12.dp))
-        SecondaryButton(
-            text = "Settings",
-            onClick = onSettings,
-            modifier = Modifier.fillMaxWidth(),
-        )
+    }
+}
+
+/**
+ * The secondary destinations as one glass bar of icons, split evenly with
+ * thin dividers; each icon's label is its content description.
+ */
+@Composable
+private fun IconBar(items: List<Triple<ImageVector, String, () -> Unit>>, modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(14.dp)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .height(52.dp)
+            .clip(shape)
+            .background(AppConfig.Palette.Glass),
+    ) {
+        items.forEachIndexed { i, (icon, label, onClick) ->
+            if (i > 0) {
+                Box(Modifier.width(1.dp).height(24.dp).background(Felt.GlassBorder))
+            }
+            IconButton(onClick = onClick, modifier = Modifier.weight(1f).fillMaxHeight()) {
+                Icon(icon, contentDescription = label, tint = Felt.OnDark)
+            }
+        }
     }
 }
 
