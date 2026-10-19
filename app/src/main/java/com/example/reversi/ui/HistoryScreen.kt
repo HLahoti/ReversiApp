@@ -1,8 +1,8 @@
 package com.example.reversi.ui
 
 import android.text.format.DateFormat
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -22,11 +22,14 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -42,11 +45,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.reversi.R
 import com.example.reversi.game.Player
 import com.example.reversi.history.HistoryEntry
 import com.example.reversi.history.HistoryFilter
@@ -220,25 +226,17 @@ private fun HeaderRow() {
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
-        HeaderText("Date", Modifier.width(DateColumn))
-        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-            Disc(Player.BLACK)
-            Spacer(Modifier.width(6.dp))
-            HeaderText("Black")
-        }
-        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-            Disc(Player.WHITE)
-            Spacer(Modifier.width(6.dp))
-            HeaderText("White")
-        }
-        HeaderText("Result", Modifier.width(ResultColumn))
+        Box(Modifier.width(DateColumn)) { HeaderIcon(Icons.Default.CalendarToday, "Date") }
+        Box(Modifier.weight(1f)) { Piece(Player.BLACK) }
+        Box(Modifier.weight(1f)) { Piece(Player.WHITE) }
+        Box(Modifier.width(ResultColumn)) { HeaderIcon(Icons.Default.EmojiEvents, "Result") }
         Spacer(Modifier.width(ChevronColumn))
     }
 }
 
 @Composable
-private fun HeaderText(text: String, modifier: Modifier = Modifier) {
-    Text(text, color = Felt.OnDarkDim, fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = modifier)
+private fun HeaderIcon(icon: ImageVector, label: String) {
+    Icon(icon, contentDescription = label, tint = Felt.OnDarkDim, modifier = Modifier.size(18.dp))
 }
 
 /** One game; tappable to replay it when [onClick] is set. */
@@ -246,7 +244,6 @@ private fun HeaderText(text: String, modifier: Modifier = Modifier) {
 private fun EntryRow(e: HistoryEntry, selfLabel: String, onClick: (() -> Unit)?) {
     val ctx = LocalContext.current
     val opponent = e.opponentName ?: if (e.mode == HistoryMode.ONLINE) "Online player" else "Bot"
-    val kind = if (e.mode == HistoryMode.BOT) "bot" else "online"
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -264,20 +261,26 @@ private fun EntryRow(e: HistoryEntry, selfLabel: String, onClick: (() -> Unit)?)
                 if (side == e.myColor) {
                     SideName(selfLabel, bold = true)
                 } else {
-                    SideName(opponent, bold = false)
-                    Text(kind, color = Felt.OnDarkDim, fontSize = 11.sp)
+                    SideName(opponent, bold = false, bot = e.mode == HistoryMode.BOT)
                 }
             }
         }
         Column(Modifier.width(ResultColumn)) {
             val (label, color) = resultLabel(e)
             Text(label, color = color, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-            Text(
-                "${e.blackCount}–${e.whiteCount}" + if (e.resignedBy != null) " · resigned" else "",
-                color = Felt.OnDarkDim,
-                fontSize = 11.sp,
-                maxLines = 1,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("${e.blackCount}–${e.whiteCount}", color = Felt.OnDarkDim, fontSize = 11.sp, maxLines = 1)
+                if (e.resignedBy != null) {
+                    Spacer(Modifier.width(6.dp))
+                    // A white flag: someone surrendered.
+                    Icon(
+                        Icons.Default.Flag,
+                        contentDescription = "Resigned",
+                        tint = Color.White,
+                        modifier = Modifier.size(12.dp),
+                    )
+                }
+            }
         }
         Box(Modifier.width(ChevronColumn), contentAlignment = Alignment.CenterEnd) {
             if (onClick != null) {
@@ -292,25 +295,38 @@ private fun EntryRow(e: HistoryEntry, selfLabel: String, onClick: (() -> Unit)?)
     }
 }
 
+/** A player's name; bots get a robot after it, which stays put if the name is cut short. */
 @Composable
-private fun SideName(name: String, bold: Boolean) {
-    Text(
-        name,
-        color = Felt.OnDark,
-        fontSize = 14.sp,
-        fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-    )
+private fun SideName(name: String, bold: Boolean, bot: Boolean = false) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            name,
+            color = Felt.OnDark,
+            fontSize = 14.sp,
+            fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        if (bot) {
+            Spacer(Modifier.width(4.dp))
+            Icon(
+                Icons.Default.SmartToy,
+                contentDescription = "Bot",
+                tint = Felt.OnDarkDim,
+                modifier = Modifier.size(14.dp),
+            )
+        }
+    }
 }
 
+/** The board's own disc render, as the column heading for that colour. */
 @Composable
-private fun Disc(color: Player) {
-    Box(
-        Modifier
-            .size(10.dp)
-            .background(if (color == Player.BLACK) Color.Black else Color.White, CircleShape)
-            .border(1.dp, Felt.GlassBorder, CircleShape),
+private fun Piece(color: Player) {
+    Image(
+        painterResource(if (color == Player.BLACK) R.drawable.piece_black else R.drawable.piece_white),
+        contentDescription = if (color == Player.BLACK) "Black" else "White",
+        modifier = Modifier.size(20.dp),
     )
 }
 
