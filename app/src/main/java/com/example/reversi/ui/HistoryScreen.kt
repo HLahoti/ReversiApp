@@ -26,9 +26,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -54,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.reversi.R
 import com.example.reversi.game.Player
+import com.example.reversi.history.HelpFilter
 import com.example.reversi.history.HistoryEntry
 import com.example.reversi.history.HistoryFilter
 import com.example.reversi.history.HistoryMode
@@ -146,6 +149,16 @@ fun HistoryScreen(onBack: () -> Unit, onReplay: (entryId: String) -> Unit) {
                         onSelect = { haptics.tap(); filter = filter.copy(opponent = it) },
                     )
                 }
+                FilterRow(
+                    options = listOf(
+                        null to "Any help",
+                        HelpFilter.HINTS to "Used hints",
+                        HelpFilter.TAKEBACKS to "Took back",
+                        HelpFilter.NONE to "No help",
+                    ),
+                    selected = filter.help,
+                    onSelect = { haptics.tap(); filter = filter.copy(help = it) },
+                )
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -259,9 +272,13 @@ private fun EntryRow(e: HistoryEntry, selfLabel: String, onClick: (() -> Unit)?)
         for (side in listOf(Player.BLACK, Player.WHITE)) {
             Column(Modifier.weight(1f).padding(end = 6.dp)) {
                 if (side == e.myColor) {
-                    SideName(selfLabel, bold = true)
+                    SideName(selfLabel, bold = true, marks = helpMarks(e))
                 } else {
-                    SideName(opponent, bold = false, bot = e.mode == HistoryMode.BOT)
+                    SideName(
+                        opponent,
+                        bold = false,
+                        marks = if (e.mode == HistoryMode.BOT) listOf(Icons.Default.SmartToy to "Bot") else emptyList(),
+                    )
                 }
             }
         }
@@ -295,9 +312,12 @@ private fun EntryRow(e: HistoryEntry, selfLabel: String, onClick: (() -> Unit)?)
     }
 }
 
-/** A player's name; bots get a robot after it, which stays put if the name is cut short. */
+/**
+ * A player's name with small [marks] after it (a robot for bots; a bulb and
+ * an undo arrow for the help you had), which stay put if the name is cut short.
+ */
 @Composable
-private fun SideName(name: String, bold: Boolean, bot: Boolean = false) {
+private fun SideName(name: String, bold: Boolean, marks: List<Pair<ImageVector, String>>) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             name,
@@ -308,16 +328,17 @@ private fun SideName(name: String, bold: Boolean, bot: Boolean = false) {
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f, fill = false),
         )
-        if (bot) {
+        for ((icon, label) in marks) {
             Spacer(Modifier.width(4.dp))
-            Icon(
-                Icons.Default.SmartToy,
-                contentDescription = "Bot",
-                tint = Felt.OnDarkDim,
-                modifier = Modifier.size(14.dp),
-            )
+            Icon(icon, contentDescription = label, tint = Felt.OnDarkDim, modifier = Modifier.size(14.dp))
         }
     }
+}
+
+/** Hints and takebacks the player used in [e], as marks for their name. */
+private fun helpMarks(e: HistoryEntry): List<Pair<ImageVector, String>> = buildList {
+    if (e.hintsUsed > 0) add(Icons.Default.Lightbulb to "Used hints")
+    if (e.takebacks > 0) add(Icons.AutoMirrored.Filled.Undo to "Took moves back")
 }
 
 /** The board's own disc render, as the column heading for that colour. */

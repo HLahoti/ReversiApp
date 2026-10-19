@@ -10,15 +10,28 @@ data class HistoryFilter(
     val outcome: HistoryOutcome? = null,
     val myColor: Player? = null,
     val opponent: String? = null,
+    val help: HelpFilter? = null,
 ) {
     fun matches(e: HistoryEntry): Boolean =
         (status == null || e.status == status) &&
             (mode == null || e.mode == mode) &&
             (outcome == null || e.outcome == outcome) &&
             (myColor == null || e.myColor == myColor) &&
-            (opponent == null || e.opponentName == opponent)
+            (opponent == null || e.opponentName == opponent) &&
+            (help == null || help.matches(e))
 
     val isDefault: Boolean get() = this == HistoryFilter()
+}
+
+/** Whether the player had help from hints or takebacks. */
+enum class HelpFilter {
+    HINTS, TAKEBACKS, NONE;
+
+    fun matches(e: HistoryEntry): Boolean = when (this) {
+        HINTS -> e.hintsUsed > 0
+        TAKEBACKS -> e.takebacks > 0
+        NONE -> e.hintsUsed == 0 && e.takebacks == 0
+    }
 }
 
 /** Wins, losses and draws among [entries]' completed games. */

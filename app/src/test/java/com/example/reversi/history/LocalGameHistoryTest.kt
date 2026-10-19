@@ -108,4 +108,17 @@ class LocalGameHistoryTest {
         assertEquals(HistoryTally(1, 1, 0), HistoryTally.of(entries))
         assertNull(entries.last().outcome)
     }
+
+    @Test
+    fun helpFilterSplitsHintsTakebacksAndNeither() {
+        val plain = entry("plain", at = 1)
+        val hinted = entry("hinted", at = 2).copy(hintsUsed = 2)
+        val both = entry("both", at = 3).copy(hintsUsed = 1, takebacks = 1)
+        val entries = listOf(plain, hinted, both)
+        fun ids(h: HelpFilter) = entries.filter(HistoryFilter(help = h)::matches).map { it.id }
+
+        assertEquals(listOf("hinted", "both"), ids(HelpFilter.HINTS))
+        assertEquals(listOf("both"), ids(HelpFilter.TAKEBACKS))
+        assertEquals(listOf("plain"), ids(HelpFilter.NONE))
+    }
 }

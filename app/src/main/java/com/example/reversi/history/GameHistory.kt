@@ -51,6 +51,10 @@ data class HistoryEntry(
      * kept.
      */
     val moves: String? = null,
+    /** Hints the player was shown in this game (vs-bot only). */
+    val hintsUsed: Int = 0,
+    /** Times the player rewound and played a different move (vs-bot only). */
+    val takebacks: Int = 0,
 ) {
     val opponentColor: Player get() = myColor.opponent()
 

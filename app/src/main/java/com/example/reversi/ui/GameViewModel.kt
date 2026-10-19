@@ -167,6 +167,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
      */
     private var isReplay = false
 
+    /** Hints shown and takebacks made in this game, for its history entry. */
+    private var hintsUsed = 0
+    private var takebacks = 0
+
     // ── Online-mode fields ────────────────────────────────────────────────
     /**
      * True for the whole life of an online game, including after it ends or
@@ -216,6 +220,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         setOpponent(opponent ?: Opponent.fromSaved(saved.difficulty))
         resetInternal()
         historyId = saved.historyId
+        history.entries.value.find { it.id == historyId }?.let {
+            hintsUsed = it.hintsUsed
+            takebacks = it.takebacks
+        }
         _state.value = loadMoves(saved.moves.map { if (it.isPass) Move.PASS else Move(it.x, it.y) })
         _viewingIndex.value = moves.size - 1
         maybeRunBot()
@@ -439,7 +447,11 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 b.chooseMove(cur.board, human)
             }
             // Drop it if the board moved on while the bot was thinking.
-            if (_state.value === cur && !chosen.isPass) _hint.value = chosen
+            if (_state.value === cur && !chosen.isPass) {
+                _hint.value = chosen
+                hintsUsed++
+                recordHistory()
+            }
         }
     }
 
@@ -676,6 +688,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         _botThinking.value = false
         _animating.value = false
         moves.clear()
+        hintsUsed = 0
+        takebacks = 0
         _resigned.value = null
         reportedGame = null
         _log.value = emptyList()
@@ -714,6 +728,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private fun truncateToViewing() {
         val idx = _viewingIndex.value
         if (idx >= moves.size - 1) return
+        takebacks++
         while (moves.size > idx + 1) moves.removeAt(moves.size - 1)
         _log.update { it.take(idx + 1) }
     }
@@ -723,7 +738,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         _viewingIndex.value = moves.size - 1
         // A move after this game's entry was completed means the board was
         // rewound and a new line played: the finished game keeps its result
-        // and replay, and the new line gets an entry of its own.
+        // and replay, and the new line gets an entry of its own. It keeps
+        // the hint and takeback counts, including the takeback just made.
         if (historyId?.let(::isCompletedInHistory) == true) historyId = null
         recordHistory()
     }
@@ -773,6 +789,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 updatedAt = now,
                 endedAt = if (outcome == null) null else now,
                 moves = if (outcome == null) null else HistoryMoves.encode(moves),
+                hintsUsed = hintsUsed,
+                takebacks = takebacks,
             ),
         )
     }
