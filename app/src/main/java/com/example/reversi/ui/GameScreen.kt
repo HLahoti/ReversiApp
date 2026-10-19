@@ -146,30 +146,35 @@ fun GameScreen(
                         },
                     )
 
-                    Spacer(Modifier.height(8.dp))
-                    GameControls(
-                        onPause = { haptics.tap(); paused = true },
-                        // Online, a new game needs both players: that's the
-                        // rematch flow behind "Play again", not a reset button.
-                        onReset = if (online == null) {
-                            { haptics.tap(); confirmReset = true }
-                        } else {
-                            null
-                        },
-                        onResign = if (canResign) {
-                            { haptics.tap(); confirmResign = true }
-                        } else {
-                            null
-                        },
-                        onHint = if (vsBot && !gameOver) {
-                            { haptics.tap(); vm.requestHint() }
-                        } else {
-                            null
-                        },
-                        hintEnabled = !thinking && !animating && hint == null &&
-                            players.of(state.toMove) == Participant.HUMAN &&
-                            state.legalMoves.isNotEmpty(),
-                    )
+                    // Nothing to pause, reset, resign or hint once the game is over.
+                    if (!gameOver) {
+                        Spacer(Modifier.height(8.dp))
+                        GameControls(
+                            onPause = { haptics.tap(); paused = true },
+                            // Online, a new game needs both players: that's the
+                            // rematch flow behind "Play again", not a reset button.
+                            onReset = if (online == null) {
+                                { haptics.tap(); confirmReset = true }
+                            } else {
+                                null
+                            },
+                            onResign = if (canResign) {
+                                { haptics.tap(); confirmResign = true }
+                            } else {
+                                null
+                            },
+                            onHint = if (vsBot) {
+                                { haptics.tap(); vm.requestHint() }
+                            } else {
+                                null
+                            },
+                            hintEnabled = !thinking && !animating && hint == null &&
+                                players.of(state.toMove) == Participant.HUMAN &&
+                                state.legalMoves.isNotEmpty(),
+                            // Nothing to reset or resign before the first move.
+                            started = log.isNotEmpty(),
+                        )
+                    }
 
                     Spacer(Modifier.height(8.dp))
                     val o = online
@@ -311,9 +316,10 @@ private fun TopBar(
 }
 
 /**
- * Pause, reset, resign and hint, in a row under the board. [onReset] is null
- * online; [onResign] is null in pass-and-play and once the game is over;
- * [onHint] is null outside vs-bot games and once the game is over.
+ * Pause, reset, resign and hint, in a row under the board; only shown while
+ * the game is in progress. [onReset] is null online; [onResign] is null in
+ * pass-and-play; [onHint] is null outside vs-bot games. Reset and resign are
+ * disabled until [started].
  */
 @Composable
 private fun GameControls(
@@ -322,6 +328,7 @@ private fun GameControls(
     onResign: (() -> Unit)?,
     onHint: (() -> Unit)?,
     hintEnabled: Boolean,
+    started: Boolean,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -332,13 +339,21 @@ private fun GameControls(
             Icon(Icons.Default.Pause, contentDescription = "Pause", tint = Felt.OnDark)
         }
         if (onReset != null) {
-            IconButton(onClick = onReset) {
-                Icon(Icons.Default.Refresh, contentDescription = "Reset", tint = Felt.OnDark)
+            IconButton(onClick = onReset, enabled = started) {
+                Icon(
+                    Icons.Default.Refresh,
+                    contentDescription = "Reset",
+                    tint = if (started) Felt.OnDark else Felt.OnDarkDim,
+                )
             }
         }
         if (onResign != null) {
-            IconButton(onClick = onResign) {
-                Icon(Icons.Default.Flag, contentDescription = "Resign", tint = Felt.OnDark)
+            IconButton(onClick = onResign, enabled = started) {
+                Icon(
+                    Icons.Default.Flag,
+                    contentDescription = "Resign",
+                    tint = if (started) Felt.OnDark else Felt.OnDarkDim,
+                )
             }
         }
         if (onHint != null) {
