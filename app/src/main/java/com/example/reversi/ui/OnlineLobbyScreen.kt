@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,12 +13,15 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -44,6 +48,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
@@ -55,6 +61,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.reversi.game.Player
+import com.example.reversi.profile.DisplayNames
+import com.example.reversi.profile.PlayerProfile
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -83,11 +91,21 @@ fun OnlineLobbyScreen(
     }
     BackHandler(enabled = state.step != LobbyStep.PICK) { backToPicker() }
 
+    val nameFocus = remember { FocusRequester() }
+
     BackdropBackground {
-        Column(
+        // Scrolls so the name and code fields stay reachable above the
+        // keyboard on short screens; centred when everything fits.
+        BoxWithConstraints(
             Modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .windowInsetsPadding(WindowInsets.safeDrawing),
+        ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = maxHeight)
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -107,6 +125,9 @@ fun OnlineLobbyScreen(
 
             when (state.step) {
                 LobbyStep.PICK -> PickPanel(
+                    profile = vm.profile,
+                    nameFocus = nameFocus,
+                    initialCode = state.roomCode?.value ?: "",
                     error = state.error,
                     onCreate = { color -> haptics.confirm(); vm.createRoom(color) },
                     onJoin = { code -> haptics.confirm(); vm.joinRoom(code) },
@@ -120,6 +141,31 @@ fun OnlineLobbyScreen(
                 )
             }
         }
+        }
+    }
+
+    val clash = state.sameNameAs
+    if (clash != null && state.step == LobbyStep.PICK) {
+        AlertDialog(
+            onDismissRequest = { vm.dismissSameName() },
+            title = { Text("Same name as your opponent") },
+            text = {
+                Text("The host of this room is also called $clash. Change your name so you can tell each other apart.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    haptics.tap()
+                    vm.dismissSameName()
+                    runCatching { nameFocus.requestFocus() }
+                }) { Text("Change name") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    haptics.confirm()
+                    vm.joinRoom(state.roomCode?.value ?: "", allowSameName = true)
+                }) { Text("Join anyway") }
+            },
+        )
     }
 
     if (confirmClose && state.step == LobbyStep.WAITING) {
@@ -162,11 +208,20 @@ private fun TopBar(title: String, onBack: () -> Unit) {
 
 @Composable
 private fun PickPanel(
+    profile: PlayerProfile,
+    nameFocus: FocusRequester,
+    initialCode: String,
     error: String?,
     onCreate: (Player?) -> Unit,
     onJoin: (String) -> Unit,
 ) {
     var hostChoice by remember { mutableStateOf<HumanColorChoice>(HumanColorChoice.RANDOM) }
+    val savedName by profile.displayName.collectAsState()
+    val hasName = savedName != null
+
+    NamePanel(profile, nameFocus)
+
+    Spacer(Modifier.height(20.dp))
 
     GlassPanel(Modifier.fillMaxWidth()) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -188,6 +243,7 @@ private fun PickPanel(
                     }
                     onCreate(color)
                 },
+                enabled = hasName,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -195,7 +251,7 @@ private fun PickPanel(
 
     Spacer(Modifier.height(20.dp))
 
-    var code by remember { mutableStateOf("") }
+    var code by remember { mutableStateOf(initialCode) }
     GlassPanel(Modifier.fillMaxWidth()) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("Join a room", color = Felt.OnDark, fontSize = 16.sp, fontWeight = FontWeight.Medium)
@@ -225,6 +281,7 @@ private fun PickPanel(
             PrimaryButton(
                 text = "Join room",
                 onClick = { onJoin(code) },
+                enabled = hasName,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -233,6 +290,48 @@ private fun PickPanel(
     if (error != null) {
         Spacer(Modifier.height(16.dp))
         Text(error, color = Felt.Highlight, fontSize = 14.sp)
+    }
+}
+
+/** The name opponents see. Typed in here, or read-only when it comes from an account. */
+@Composable
+private fun NamePanel(profile: PlayerProfile, focus: FocusRequester) {
+    // The field keeps what's typed (e.g. a trailing space mid-name); the
+    // profile stores the cleaned-up version.
+    var text by remember { mutableStateOf(profile.displayName.value ?: "") }
+    GlassPanel(Modifier.fillMaxWidth()) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("Your name", color = Felt.OnDark, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+            Spacer(Modifier.height(10.dp))
+            OutlinedTextField(
+                value = text,
+                onValueChange = {
+                    text = it.take(DisplayNames.MAX_LENGTH)
+                    profile.setDisplayName(text)
+                },
+                enabled = profile.canEditName,
+                singleLine = true,
+                placeholder = { Text("Shown to your opponent") },
+                supportingText = {
+                    Text(
+                        if (DisplayNames.clean(text) == null) "Set a name to play online"
+                        else "${text.length}/${DisplayNames.MAX_LENGTH}",
+                    )
+                },
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
+                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 18.sp, color = Felt.OnDark),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Felt.Highlight,
+                    unfocusedBorderColor = Felt.GlassBorder,
+                    focusedTextColor = Felt.OnDark,
+                    unfocusedTextColor = Felt.OnDark,
+                    cursorColor = Felt.Highlight,
+                    focusedSupportingTextColor = Felt.OnDarkDim,
+                    unfocusedSupportingTextColor = Felt.OnDarkDim,
+                ),
+                modifier = Modifier.fillMaxWidth().focusRequester(focus),
+            )
+        }
     }
 }
 
@@ -333,9 +432,15 @@ private fun WaitingPanel(code: String, onTap: () -> Unit, onCancel: () -> Unit) 
 }
 
 @Composable
-private fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun PrimaryButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
     Button(
         onClick = onClick,
+        enabled = enabled,
         modifier = modifier.height(48.dp),
         shape = RoundedCornerShape(14.dp),
         colors = ButtonDefaults.buttonColors(

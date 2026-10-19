@@ -40,8 +40,10 @@ const moveId = (round, seq) => `${String(round).padStart(3, '0')}-${String(seq).
 
 /** The v1.2 client's Firestore traffic, call for call. */
 class V12Client {
-  constructor(env, uid) {
+  // `name` is the display name later clients send; v1.2 always sent null.
+  constructor(env, uid, name = null) {
     this.uid = uid;
+    this.name = name;
     this.db = env.authenticatedContext(uid).firestore();
   }
 
@@ -56,7 +58,7 @@ class V12Client {
       createdAt: serverTimestamp(),
       hostUid: this.uid,
       hostColor,
-      hostName: null,
+      hostName: this.name,
       guestUid: null,
       guestName: null,
       moveCount: 0,
@@ -76,7 +78,7 @@ class V12Client {
       if (d.hostUid === this.uid) return;
       if (d.guestUid != null && d.guestUid !== this.uid) throw new Error('RoomFull');
       if (d.status !== 'waiting' && d.status !== 'active') throw new Error(`Room is ${d.status}`);
-      tx.update(ref, { guestUid: this.uid, guestName: null, status: 'active', expiresAt: ttl() });
+      tx.update(ref, { guestUid: this.uid, guestName: this.name, status: 'active', expiresAt: ttl() });
     });
   }
 
@@ -272,6 +274,15 @@ describe('v1.2 client compatibility', () => {
     assert.equal((await roomData()).guestUid, 'guest');
   });
 
+  it('seats players with display names of up to 10 characters', async () => {
+    const host = new V12Client(env, 'host', 'Harsh');
+    await host.createRoom();
+    await new V12Client(env, 'guest', 'Abcdefghij').joinRoom();
+    const d = await roomData();
+    assert.equal(d.hostName, 'Harsh');
+    assert.equal(d.guestName, 'Abcdefghij');
+  });
+
   it('lets the host sweep a room nobody joined', async () => {
     const host = new V12Client(env, 'host');
     await host.createRoom();
@@ -372,6 +383,7 @@ describe('attacks: strangers', () => {
     await assertFails(updateDoc(ref, { ...join, guestUid: 'someone-else' }));
     await assertFails(updateDoc(ref, { ...join, status: 'waiting' }));
     await assertFails(updateDoc(ref, { ...join, guestName: 'x'.repeat(5000) }));
+    await assertFails(updateDoc(ref, { ...join, guestName: 'x'.repeat(11) })); // DisplayNames.MAX_LENGTH
     await assertFails(updateDoc(ref, { ...join, expiresAt: Timestamp.fromDate(new Date('9999-01-01')) }));
     await assertFails(updateDoc(ref, { hostUid: 'eve' }));
     await assertFails(deleteDoc(ref));
@@ -410,6 +422,7 @@ describe('attacks: strangers', () => {
     await assertFails(setDoc(ref, { ...good, moveCount: 3 }));
     await assertFails(setDoc(ref, { ...good, hostColor: 'RED' }));
     await assertFails(setDoc(ref, { ...good, hostName: 'x'.repeat(100_000) }));
+    await assertFails(setDoc(ref, { ...good, hostName: 'x'.repeat(11) })); // DisplayNames.MAX_LENGTH
     await assertFails(setDoc(ref, { ...good, junk: 'x'.repeat(100_000) }));
     await assertFails(setDoc(ref, { ...good, expiresAt: Timestamp.fromDate(new Date('9999-01-01')) }));
     await assertFails(setDoc(ref, { ...good, createdAt: Timestamp.fromDate(new Date('2000-01-01')) }));

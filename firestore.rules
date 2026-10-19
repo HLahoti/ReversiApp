@@ -19,7 +19,8 @@ service cloud.firestore {
     // Room codes: RoomCodes.ALPHABET, 6 characters.
     function validCode(code) { return code.matches('^[A-HJKMNP-Z2-9]{6}$'); }
     function validColor(c) { return c == 'BLACK' || c == 'WHITE'; }
-    function validName(n) { return n == null || (n is string && n.size() <= 24); }
+    // DisplayNames.MAX_LENGTH in the app.
+    function validName(n) { return n == null || (n is string && n.size() <= 10); }
     // The client writes now + 24 h. No TTL policy runs on it today (rooms are
     // cleaned up by the clients), but keep it bounded in case one is enabled:
     // slack for skewed device clocks, never a far-future value.

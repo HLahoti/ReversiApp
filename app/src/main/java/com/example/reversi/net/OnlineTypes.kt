@@ -97,6 +97,8 @@ sealed class OnlineError(message: String, cause: Throwable? = null) : Exception(
     class RoomFull(code: RoomCode) : OnlineError("Room $code already has two players.")
     class InvalidCode(code: String) : OnlineError("'$code' is not a valid room code.")
     class NotSignedIn : OnlineError("You must sign in before creating or joining a room.")
+    /** The room's host goes by the same name as us; see [OnlineClient.joinRoom]. */
+    class SameName(val name: String) : OnlineError("The host of this room is also called $name.")
     class Network(cause: Throwable) : OnlineError("Network problem: ${cause.message}", cause)
     class Backend(message: String, cause: Throwable? = null) : OnlineError(message, cause)
 }

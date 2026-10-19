@@ -23,6 +23,8 @@ import com.example.reversi.net.PlayerIdentity
 import com.example.reversi.net.RoomCode
 import com.example.reversi.net.RoomCodes
 import com.example.reversi.net.RoomTracker
+import com.example.reversi.profile.DisplayNames
+import com.example.reversi.profile.PlayerProfile
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
@@ -38,6 +40,7 @@ import kotlinx.coroutines.tasks.await
  */
 class FirebaseOnlineClient(
     context: Context,
+    private val profile: PlayerProfile,
     authProvider: () -> FirebaseAuth = { FirebaseAuth.getInstance() },
     dbProvider: () -> FirebaseFirestore = { FirebaseFirestore.getInstance() },
 ) : OnlineClient {
@@ -75,7 +78,7 @@ class FirebaseOnlineClient(
         }
         return PlayerIdentity(
             id = PlayerId(user.uid),
-            displayName = displayName ?: user.displayName,
+            displayName = DisplayNames.clean(displayName ?: profile.displayName.value),
         )
     }
 
@@ -110,7 +113,7 @@ class FirebaseOnlineClient(
         return FirebaseOnlineSession(db, code, me, tracker)
     }
 
-    override suspend fun joinRoom(code: RoomCode): OnlineSession {
+    override suspend fun joinRoom(code: RoomCode, allowSameName: Boolean): OnlineSession {
         val me = ensureSignedIn()
         val doc = db.collection(FS.COL_ROOMS).document(code.value)
 
@@ -130,6 +133,10 @@ class FirebaseOnlineClient(
                 }
                 if (status != FS.S_WAITING && status != FS.S_ACTIVE) {
                     throw OnlineError.Backend("Room is $status and cannot be joined.")
+                }
+                val hostName = snap.getString(FS.F_HOST_NAME)
+                if (!allowSameName && guestUid == null && DisplayNames.same(hostName, me.displayName)) {
+                    throw OnlineError.SameName(hostName!!)
                 }
                 tx.update(
                     doc,

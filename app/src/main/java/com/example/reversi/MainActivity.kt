@@ -30,6 +30,8 @@ import com.example.reversi.game.Player
 import com.example.reversi.net.OnlineRegistry
 import com.example.reversi.net.SessionHandoff
 import com.example.reversi.net.firebase.FirebaseOnlineClient
+import com.example.reversi.profile.LocalPlayerProfile
+import com.example.reversi.profile.ProfileRegistry
 import com.example.reversi.ui.GameScreen
 import com.example.reversi.ui.GameViewModel
 import com.example.reversi.ui.HomeScreen
@@ -48,9 +50,14 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Who the player is online: a name typed into the lobby for now.
+        // Swap this line for an account-backed profile (e.g. Google sign-in).
+        val profile = LocalPlayerProfile(applicationContext)
+        ProfileRegistry.install(profile)
+
         // Register the online backend. Swap this one line (and the import
         // above) when moving off Firebase to a custom WebSocket server.
-        val onlineClient = FirebaseOnlineClient(applicationContext)
+        val onlineClient = FirebaseOnlineClient(applicationContext, profile)
         OnlineRegistry.install(onlineClient)
 
         // Best-effort sweep of any rooms this device still has in its local
@@ -221,10 +228,11 @@ class MainActivity : ComponentActivity() {
                             players.black -> Player.WHITE
                             else -> null // not configured yet
                         }
+                        val opponent = online?.opponentName?.let { "vs $it" } ?: "Online"
                         GameScreen(
                             vm,
-                            title = if (localColor == null) "Online"
-                            else "Online · you are ${localColor.name.lowercase()}",
+                            title = if (localColor == null) opponent
+                            else "$opponent · you are ${localColor.name.lowercase()}",
                             onBack = { requestLeave() },
                         )
                         if (confirmLeave) {

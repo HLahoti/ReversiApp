@@ -192,11 +192,12 @@ fun GameScreen(
                             resigned = resigned,
                             resignedByMe = resigned?.let { players.of(it) == Participant.HUMAN } == true,
                             online = o,
+                            myColor = if (players.black == Participant.HUMAN) Player.BLACK else Player.WHITE,
                             onPlayAgain = { haptics.confirm(); vm.playAgain() },
                         )
                     } else if (o != null && o.opponentLeft) {
                         GlassPanel(Modifier.fillMaxWidth()) {
-                            Text("Your opponent left the game.", color = Felt.OnDark)
+                            Text("${o.opponentSubject} left the game.", color = Felt.OnDark)
                         }
                     } else if (state.legalMoves.isEmpty() &&
                         players.of(state.toMove) == Participant.HUMAN
@@ -236,7 +237,9 @@ fun GameScreen(
             AlertDialog(
                 onDismissRequest = { confirmResign = false },
                 title = { Text("Resign game?") },
-                text = { Text("You'll forfeit this game and your opponent wins. This can't be undone.") },
+                text = {
+                    Text("You'll forfeit this game and ${online.opponentObject} wins. This can't be undone.")
+                },
                 confirmButton = {
                     TextButton(onClick = {
                         haptics.confirm()
@@ -471,9 +474,20 @@ private fun EndGamePanel(
     resigned: Player?,
     resignedByMe: Boolean,
     online: OnlineUiState?,
+    /** The local player's colour; only read online, where results name the players. */
+    myColor: Player,
     onPlayAgain: () -> Unit,
 ) {
+    val mine = if (myColor == Player.BLACK) black else white
+    val theirs = if (myColor == Player.BLACK) white else black
     val msg = when {
+        online != null -> when {
+            resigned != null && resignedByMe -> "${online.opponentSubject} wins · you resigned"
+            resigned != null -> "You win · ${online.opponentObject} resigned"
+            mine > theirs -> "You win · $mine – $theirs"
+            theirs > mine -> "${online.opponentSubject} wins · $theirs – $mine"
+            else -> "Draw · $black – $white"
+        }
         resigned != null -> {
             val winner = if (resigned == Player.BLACK) "White" else "Black"
             winner + if (resignedByMe) " wins · you resigned" else " wins · your opponent resigned"
@@ -488,7 +502,7 @@ private fun EndGamePanel(
             Spacer(Modifier.height(12.dp))
             when {
                 online?.opponentLeft == true ->
-                    Text("Your opponent left the game.", color = Felt.OnDarkDim, fontSize = 14.sp)
+                    Text("${online.opponentSubject} left the game.", color = Felt.OnDarkDim, fontSize = 14.sp)
                 online?.rematchRequested == true ->
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -501,7 +515,7 @@ private fun EndGamePanel(
                         )
                         Spacer(Modifier.width(10.dp))
                         Text(
-                            "Waiting for opponent to rematch…",
+                            "Waiting for ${online.opponentObject} to rematch…",
                             color = Felt.OnDark,
                             fontSize = 14.sp,
                         )
@@ -509,7 +523,7 @@ private fun EndGamePanel(
                 else -> {
                     if (online?.opponentWantsRematch == true) {
                         Text(
-                            "Your opponent wants a rematch",
+                            "${online.opponentSubject} wants a rematch",
                             color = Felt.OnDarkDim,
                             fontSize = 14.sp,
                         )
@@ -527,3 +541,11 @@ private fun EndGamePanel(
         }
     }
 }
+
+/** The opponent at the start of a sentence: their display name online, when known. */
+private val OnlineUiState?.opponentSubject: String
+    get() = this?.opponentName ?: "Your opponent"
+
+/** The opponent mid-sentence: their display name online, when known. */
+private val OnlineUiState?.opponentObject: String
+    get() = this?.opponentName ?: "your opponent"

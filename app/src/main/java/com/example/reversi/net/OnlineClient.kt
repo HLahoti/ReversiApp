@@ -17,6 +17,9 @@ interface OnlineClient {
      * Ensure the local device has an identity (anonymous auth under the hood
      * for the Firebase impl; a locally-persisted UUID + token exchange for a
      * custom server). Must be called before create/join.
+     *
+     * @param displayName the name to show opponents; null uses the installed
+     *   [com.example.reversi.profile.PlayerProfile]'s.
      */
     suspend fun ensureSignedIn(displayName: String? = null): PlayerIdentity
 
@@ -32,8 +35,12 @@ interface OnlineClient {
     /**
      * Join an existing room by its short code. The returned session is
      * immediately [SessionStatus.ACTIVE] on the happy path.
+     *
+     * Throws [OnlineError.SameName] without taking the seat when the host's
+     * display name matches ours, so the player can rename first; pass
+     * [allowSameName] to join anyway.
      */
-    suspend fun joinRoom(code: RoomCode): OnlineSession
+    suspend fun joinRoom(code: RoomCode, allowSameName: Boolean = false): OnlineSession
 
     /**
      * Best-effort cleanup of every room this device has tracked but hasn't
