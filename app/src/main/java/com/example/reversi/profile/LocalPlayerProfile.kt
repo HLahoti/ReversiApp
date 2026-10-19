@@ -18,6 +18,8 @@ class LocalPlayerProfile(context: Context) : PlayerProfile {
 
     override val canEditName: Boolean = true
 
+    override val selfLabel: String = "You"
+
     override fun setDisplayName(name: String) {
         val cleaned = DisplayNames.clean(name)
         _displayName.value = cleaned

@@ -11,6 +11,12 @@ import kotlinx.coroutines.flow.StateFlow
  */
 interface PlayerProfile {
 
+    /**
+     * What the local player is called on their own screens, such as the
+     * game history. "You" until there are accounts.
+     */
+    val selfLabel: String
+
     /** The name shown to online opponents, or null until one is set. */
     val displayName: StateFlow<String?>
 

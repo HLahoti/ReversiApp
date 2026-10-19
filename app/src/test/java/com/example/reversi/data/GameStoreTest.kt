@@ -34,6 +34,16 @@ class GameStoreTest {
     }
 
     @Test
+    fun vsBotSavesCarryTheirHistoryId() {
+        val store = GameStore(tmp.root)
+        store.writeVsBot(moves, Player.BLACK, Opponent.GUK, historyId = "g1")
+        store.writeVsBot(moves, Player.BLACK, Opponent.PRAGG)
+
+        assertEquals("g1", store.load(SavedMode.VS_BOT, Opponent.GUK)?.historyId)
+        assertEquals(setOf("g1"), store.resumableHistoryIds())
+    }
+
+    @Test
     fun twoPlayerSlotIsSeparate() {
         val store = GameStore(tmp.root)
         store.writeTwoPlayer(moves)

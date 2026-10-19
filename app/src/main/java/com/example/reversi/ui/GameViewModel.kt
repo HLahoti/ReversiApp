@@ -17,10 +17,16 @@ import com.example.reversi.data.UserSettings
 import com.example.reversi.game.GameState
 import com.example.reversi.game.Move
 import com.example.reversi.game.Player
+import com.example.reversi.history.HistoryEntry
+import com.example.reversi.history.HistoryMode
+import com.example.reversi.history.HistoryOutcome
+import com.example.reversi.history.HistoryRegistry
+import com.example.reversi.history.HistoryStatus
 import com.example.reversi.net.OnlineScope
 import com.example.reversi.net.OnlineSession
 import com.example.reversi.net.SessionState
 import com.example.reversi.net.SessionStatus
+import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.max
 import kotlinx.coroutines.Dispatchers
@@ -81,6 +87,7 @@ data class OnlineUiState(
 class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     private val store = GameStore(app)
+    private val history = HistoryRegistry.current
 
     private val _state = MutableStateFlow(GameState())
     val state: StateFlow<GameState> = _state.asStateFlow()
@@ -137,6 +144,12 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     /** Set once configure/resume has run, so persist() knows which file to write. */
     private var mode: SavedMode? = null
 
+    /**
+     * This game's entry in the game history, from its first move. Null
+     * before then, and always for two-player games, which aren't recorded.
+     */
+    private var historyId: String? = null
+
     // ── Online-mode fields ────────────────────────────────────────────────
     /**
      * True for the whole life of an online game, including after it ends or
@@ -158,11 +171,18 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private var desyncError: String? = null
 
     fun configure(players: Players, opponent: Opponent? = null) {
+        abandonHistory()
         _players.value = players
         mode = modeFor(players)
         setOpponent(opponent)
         resetInternal()
-        mode?.let { store.clear(it, slotOpponent()) }
+        mode?.let { m ->
+            // A new game replaces this bot's paused one, which can't be resumed now.
+            if (m == SavedMode.VS_BOT) {
+                store.load(m, slotOpponent())?.historyId?.let(history::abandon)
+            }
+            store.clear(m, slotOpponent())
+        }
         playOpening()
     }
 
@@ -178,6 +198,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         mode = modeFor(players)
         setOpponent(opponent ?: Opponent.fromSaved(saved.difficulty))
         resetInternal()
+        historyId = saved.historyId
         var s = GameState()
         val entries = mutableListOf<MoveLogEntry>()
         for (m in saved.moves) {
@@ -209,6 +230,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         onlineRound = session.state.value.round
         rematchPending = false
         desyncError = null
+        historyId = null
         _players.value = Players(
             black = if (localColor == Player.BLACK) Participant.HUMAN else Participant.REMOTE,
             white = if (localColor == Player.WHITE) Participant.HUMAN else Participant.REMOTE,
@@ -234,6 +256,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
      * triggered this call.
      */
     fun leaveOnline() {
+        abandonHistory()
         isOnline = false
         val s = session ?: return
         sessionJob?.cancel()
@@ -278,10 +301,14 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             val me = localColor ?: return
             val round = onlineRound
             _resigned.value = me
+            recordHistory()
             viewModelScope.launch {
                 runCatching { s.resign(round) }
                     .onFailure { t ->
-                        if (onlineRound == round) _resigned.value = null
+                        if (onlineRound == round) {
+                            _resigned.value = null
+                            recordHistory()
+                        }
                         _online.update { it?.copy(error = t.message ?: "Could not resign.") }
                     }
             }
@@ -292,6 +319,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         clearHint()
         _botThinking.value = false
         _resigned.value = human
+        recordHistory()
         mode?.let { store.clear(it, slotOpponent()) }
     }
 
@@ -352,6 +380,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         if (snapshot.status == SessionStatus.ABANDONED) {
             // The opponent left and deleted the room. Stay on the board, but
             // drop the connection; finish() also clears the tracker entry.
+            abandonHistory()
             sessionJob?.cancel()
             sessionJob = null
             session?.let { s -> OnlineScope.launch { runCatching { s.finish() } } }
@@ -370,6 +399,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             onlineRound = snapshot.round
             rematchPending = false
             desyncError = null
+            historyId = null // the finished round keeps its entry; the next gets its own
             snapshot.myColor?.let { color ->
                 localColor = color
                 _players.value = Players(
@@ -381,7 +411,11 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             playOpening()
         }
         // Keep an optimistic local resignation until the room confirms it.
-        snapshot.resignedBy?.let { _resigned.value = it }
+        snapshot.resignedBy?.let {
+            val changed = _resigned.value != it
+            _resigned.value = it
+            if (changed) recordHistory()
+        }
         if (snapshot.rematchRequestedByMe) rematchPending = false
         _online.value = OnlineUiState(
             status = snapshot.status,
@@ -457,6 +491,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         botJob?.cancel()
+        abandonHistory()
         resetInternal()
         mode?.let { store.clear(it, slotOpponent()) }
         playOpening()
@@ -493,7 +528,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             SavedMode.TWO_PLAYER -> store.writeTwoPlayer(saved)
             SavedMode.VS_BOT -> {
                 val human = humanColorIn(_players.value) ?: return
-                store.writeVsBot(saved, human, slotOpponent())
+                store.writeVsBot(saved, human, slotOpponent(), historyId)
             }
         }
     }
@@ -581,6 +616,58 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private fun appendLog(move: Move, mover: Player, next: GameState) {
         _log.update { it + MoveLogEntry(labelFor(move), mover, next.blackCount, next.whiteCount) }
         _viewingIndex.value = moves.size - 1
+        recordHistory()
+    }
+
+    /**
+     * Write this game as it stands to the game history: called after every
+     * move and resignation. Two-player games aren't recorded.
+     */
+    private fun recordHistory() {
+        val kind = when {
+            isOnline -> HistoryMode.ONLINE
+            mode == SavedMode.VS_BOT -> HistoryMode.BOT
+            else -> return
+        }
+        val me = (if (isOnline) localColor else humanColorIn(_players.value)) ?: return
+        if (moves.isEmpty()) return
+        val now = System.currentTimeMillis()
+        val id = historyId ?: UUID.randomUUID().toString().also { historyId = it }
+        val s = _state.value
+        val resignedBy = _resigned.value
+        val mine = if (me == Player.BLACK) s.blackCount else s.whiteCount
+        val theirs = if (me == Player.BLACK) s.whiteCount else s.blackCount
+        val outcome = when {
+            resignedBy != null -> if (resignedBy == me) HistoryOutcome.LOSS else HistoryOutcome.WIN
+            !s.isTerminal -> null
+            mine > theirs -> HistoryOutcome.WIN
+            mine < theirs -> HistoryOutcome.LOSS
+            else -> HistoryOutcome.DRAW
+        }
+        history.record(
+            HistoryEntry(
+                id = id,
+                mode = kind,
+                myColor = me,
+                opponentName = if (isOnline) _online.value?.opponentName else slotOpponent().displayName,
+                botId = if (isOnline) null else slotOpponent().name,
+                status = if (outcome == null) HistoryStatus.IN_PROGRESS else HistoryStatus.COMPLETED,
+                outcome = outcome,
+                resignedBy = resignedBy,
+                blackCount = s.blackCount,
+                whiteCount = s.whiteCount,
+                moveCount = moves.size,
+                startedAt = now,
+                updatedAt = now,
+                endedAt = if (outcome == null) null else now,
+            ),
+        )
+    }
+
+    /** The game stops here; if it hadn't ended, its history entry is abandoned. */
+    private fun abandonHistory() {
+        historyId?.let { if (!isGameOver()) history.abandon(it) }
+        historyId = null
     }
 
     private fun labelFor(move: Move): String =

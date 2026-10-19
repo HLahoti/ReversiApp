@@ -1,0 +1,343 @@
+package com.example.reversi.ui
+
+import android.text.format.DateFormat
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.reversi.game.Player
+import com.example.reversi.history.HistoryEntry
+import com.example.reversi.history.HistoryFilter
+import com.example.reversi.history.HistoryMode
+import com.example.reversi.history.HistoryOutcome
+import com.example.reversi.history.HistoryRegistry
+import com.example.reversi.history.HistoryStatus
+import com.example.reversi.history.HistoryTally
+import com.example.reversi.profile.ProfileRegistry
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+
+/** Past vs-bot and online games, newest first, with filters. */
+@Composable
+fun HistoryScreen(onBack: () -> Unit) {
+    val haptics = rememberHaptics()
+    val all by HistoryRegistry.current.entries.collectAsState()
+    val selfLabel = ProfileRegistry.current.selfLabel
+    var filter by remember { mutableStateOf(HistoryFilter()) }
+    var moreFilters by rememberSaveable { mutableStateOf(false) }
+    val shown = remember(all, filter) { all.filter(filter::matches) }
+
+    BackdropBackground {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(horizontal = 16.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            ) {
+                IconButton(onClick = { haptics.tap(); onBack() }) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Felt.OnDark,
+                    )
+                }
+                Text("History", color = Felt.OnDark, fontSize = 20.sp, fontWeight = FontWeight.Medium)
+            }
+
+            Spacer(Modifier.height(8.dp))
+            FilterRow(
+                options = listOf(
+                    null to "All",
+                    HistoryStatus.COMPLETED to "Completed",
+                    HistoryStatus.IN_PROGRESS to "In progress",
+                    HistoryStatus.ABANDONED to "Abandoned",
+                ),
+                selected = filter.status,
+                onSelect = { haptics.tap(); filter = filter.copy(status = it) },
+            )
+            FilterRow(
+                options = listOf(null to "All games", HistoryMode.BOT to "Bots", HistoryMode.ONLINE to "Online"),
+                selected = filter.mode,
+                // The opponent list depends on the mode, so a stale pick is dropped.
+                onSelect = { haptics.tap(); filter = filter.copy(mode = it, opponent = null) },
+            )
+            if (moreFilters) {
+                FilterRow(
+                    options = listOf(
+                        null to "Any result",
+                        HistoryOutcome.WIN to "Won",
+                        HistoryOutcome.LOSS to "Lost",
+                        HistoryOutcome.DRAW to "Drawn",
+                    ),
+                    selected = filter.outcome,
+                    onSelect = { haptics.tap(); filter = filter.copy(outcome = it) },
+                )
+                FilterRow(
+                    options = listOf(null to "Either colour", Player.BLACK to "As black", Player.WHITE to "As white"),
+                    selected = filter.myColor,
+                    onSelect = { haptics.tap(); filter = filter.copy(myColor = it) },
+                )
+                val opponents = remember(all, filter.mode) {
+                    all.filter { filter.mode == null || it.mode == filter.mode }
+                        .mapNotNull { it.opponentName }
+                        .distinct()
+                        .sortedBy { it.lowercase() }
+                }
+                if (opponents.size > 1) {
+                    FilterRow(
+                        options = listOf<Pair<String?, String>>(null to "Anyone") + opponents.map { it to it },
+                        selected = filter.opponent,
+                        onSelect = { haptics.tap(); filter = filter.copy(opponent = it) },
+                    )
+                }
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    summary(shown),
+                    color = Felt.OnDarkDim,
+                    fontSize = 13.sp,
+                    modifier = Modifier.weight(1f).padding(start = 4.dp),
+                )
+                if (!filter.isDefault) {
+                    TextButton(onClick = { haptics.tap(); filter = HistoryFilter() }) {
+                        Text("Clear", color = Felt.Highlight, fontSize = 13.sp)
+                    }
+                }
+                TextButton(onClick = { haptics.tap(); moreFilters = !moreFilters }) {
+                    Text(
+                        if (moreFilters) "Fewer filters" else "More filters",
+                        color = Felt.Highlight,
+                        fontSize = 13.sp,
+                    )
+                }
+            }
+
+            GlassPanel(
+                Modifier.fillMaxWidth().weight(1f).padding(bottom = 16.dp),
+                padding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+            ) {
+                Column {
+                    HeaderRow()
+                    HorizontalDivider(color = Felt.GlassBorder)
+                    if (shown.isEmpty()) {
+                        Box(
+                            Modifier.fillMaxSize().padding(24.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                if (all.isEmpty()) {
+                                    "No games yet. Games against the bots and online opponents show up here."
+                                } else {
+                                    "No games match these filters."
+                                },
+                                color = Felt.OnDarkDim,
+                                fontSize = 14.sp,
+                            )
+                        }
+                    } else {
+                        LazyColumn {
+                            items(shown, key = { it.id }) { e ->
+                                EntryRow(e, selfLabel)
+                                HorizontalDivider(color = Felt.GlassBorder.copy(alpha = 0.4f))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private val DateColumn = 76.dp
+private val ResultColumn = 88.dp
+
+@Composable
+private fun HeaderRow() {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        HeaderText("Date", Modifier.width(DateColumn))
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            Disc(Player.BLACK)
+            Spacer(Modifier.width(6.dp))
+            HeaderText("Black")
+        }
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            Disc(Player.WHITE)
+            Spacer(Modifier.width(6.dp))
+            HeaderText("White")
+        }
+        HeaderText("Result", Modifier.width(ResultColumn))
+    }
+}
+
+@Composable
+private fun HeaderText(text: String, modifier: Modifier = Modifier) {
+    Text(text, color = Felt.OnDarkDim, fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = modifier)
+}
+
+@Composable
+private fun EntryRow(e: HistoryEntry, selfLabel: String) {
+    val ctx = LocalContext.current
+    val opponent = e.opponentName ?: if (e.mode == HistoryMode.ONLINE) "Online player" else "Bot"
+    val kind = if (e.mode == HistoryMode.BOT) "bot" else "online"
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Column(Modifier.width(DateColumn)) {
+            val (day, time) = formatWhen(ctx, e.lastActivity)
+            Text(day, color = Felt.OnDark, fontSize = 13.sp)
+            Text(time, color = Felt.OnDarkDim, fontSize = 12.sp)
+        }
+        for (side in listOf(Player.BLACK, Player.WHITE)) {
+            Column(Modifier.weight(1f).padding(end = 6.dp)) {
+                if (side == e.myColor) {
+                    SideName(selfLabel, bold = true)
+                } else {
+                    SideName(opponent, bold = false)
+                    Text(kind, color = Felt.OnDarkDim, fontSize = 11.sp)
+                }
+            }
+        }
+        Column(Modifier.width(ResultColumn)) {
+            val (label, color) = resultLabel(e)
+            Text(label, color = color, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            Text(
+                "${e.blackCount}–${e.whiteCount}" + if (e.resignedBy != null) " · resigned" else "",
+                color = Felt.OnDarkDim,
+                fontSize = 11.sp,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SideName(name: String, bold: Boolean) {
+    Text(
+        name,
+        color = Felt.OnDark,
+        fontSize = 14.sp,
+        fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+@Composable
+private fun Disc(color: Player) {
+    Box(
+        Modifier
+            .size(10.dp)
+            .background(if (color == Player.BLACK) Color.Black else Color.White, CircleShape)
+            .border(1.dp, Felt.GlassBorder, CircleShape),
+    )
+}
+
+@Composable
+private fun <T> FilterRow(options: List<Pair<T?, String>>, selected: T?, onSelect: (T?) -> Unit) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(vertical = 4.dp),
+    ) {
+        for ((value, label) in options) {
+            val on = value == selected
+            Text(
+                label,
+                color = if (on) Felt.Deep else Felt.OnDark,
+                fontSize = 13.sp,
+                fontWeight = if (on) FontWeight.Medium else FontWeight.Normal,
+                modifier = Modifier
+                    .background(
+                        if (on) Felt.Highlight.copy(alpha = 0.9f) else Felt.Glass,
+                        RoundedCornerShape(999.dp),
+                    )
+                    .clickable { onSelect(value) }
+                    .padding(horizontal = 14.dp, vertical = 7.dp),
+            )
+        }
+    }
+}
+
+private fun resultLabel(e: HistoryEntry): Pair<String, Color> = when (e.status) {
+    HistoryStatus.IN_PROGRESS -> "In progress" to Felt.Highlight
+    HistoryStatus.ABANDONED -> "Abandoned" to Felt.OnDarkDim
+    HistoryStatus.COMPLETED -> when (e.outcome) {
+        HistoryOutcome.WIN -> "Won" to Felt.Highlight
+        HistoryOutcome.LOSS -> "Lost" to Felt.OnDark
+        else -> "Draw" to Felt.OnDark
+    }
+}
+
+/** "12 games · 7 won, 4 lost, 1 drawn", counting only completed games in the tally. */
+private fun summary(entries: List<HistoryEntry>): String {
+    val n = entries.size
+    val games = if (n == 1) "1 game" else "$n games"
+    val t = HistoryTally.of(entries)
+    if (t.wins + t.losses + t.draws == 0) return games
+    return "$games · ${t.wins} won, ${t.losses} lost, ${t.draws} drawn"
+}
+
+/** Day (with the year only when it isn't this one) and time, in the device's style. */
+private fun formatWhen(ctx: android.content.Context, millis: Long): Pair<String, String> {
+    val locale = Locale.getDefault()
+    val then = Calendar.getInstance().apply { timeInMillis = millis }
+    val sameYear = then.get(Calendar.YEAR) == Calendar.getInstance().get(Calendar.YEAR)
+    val dayPattern = DateFormat.getBestDateTimePattern(locale, if (sameYear) "dMMM" else "dMMMyy")
+    val date = Date(millis)
+    return DateFormat.format(dayPattern, date).toString() to DateFormat.getTimeFormat(ctx).format(date)
+}

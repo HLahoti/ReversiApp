@@ -30,6 +30,8 @@ import com.example.reversi.game.Player
 import com.example.reversi.net.OnlineRegistry
 import com.example.reversi.net.SessionHandoff
 import com.example.reversi.net.firebase.FirebaseOnlineClient
+import com.example.reversi.history.HistoryRegistry
+import com.example.reversi.history.LocalGameHistory
 import com.example.reversi.profile.LocalPlayerProfile
 import com.example.reversi.profile.ProfileRegistry
 import com.example.reversi.ui.GameScreen
@@ -40,6 +42,7 @@ import com.example.reversi.ui.HumanColorChoice
 import com.example.reversi.ui.OnlineLobbyScreen
 import com.example.reversi.ui.ReversiTheme
 import com.example.reversi.ui.SettingsScreen
+import com.example.reversi.ui.HistoryScreen
 import com.example.reversi.update.GitHubReleaseChecker
 import com.example.reversi.update.Updates
 import com.example.reversi.ui.Participant
@@ -59,6 +62,14 @@ class MainActivity : ComponentActivity() {
         // above) when moving off Firebase to a custom WebSocket server.
         val onlineClient = FirebaseOnlineClient(applicationContext, profile)
         OnlineRegistry.install(onlineClient)
+
+        // Game history, kept on the device. Once per process: an activity
+        // recreated mid-game must not abandon the game it is showing. Games
+        // still "in progress" from a previous process can only carry on if
+        // they're a saved vs-bot game; the rest are abandoned.
+        if (HistoryRegistry.installIfAbsent { LocalGameHistory(applicationContext) }) {
+            HistoryRegistry.current.abandonAllExcept(GameStore(applicationContext).resumableHistoryIds())
+        }
 
         // Best-effort sweep of any rooms this device still has in its local
         // tracker from a previous session (host or guest). Each is deleted if
@@ -103,12 +114,16 @@ class MainActivity : ComponentActivity() {
                                 )
                             },
                             onStartOnline = { nav.navigate("online/lobby") },
+                            onHistory = { nav.navigate("history") },
                             onHowToPlay = { nav.navigate("howto") },
                             onSettings = { nav.navigate("settings") },
                         )
                     }
                     composable("settings") {
                         SettingsScreen(onBack = { nav.popBackStack() })
+                    }
+                    composable("history") {
+                        HistoryScreen(onBack = { nav.popBackStack() })
                     }
                     composable("howto") {
                         HowToPlayScreen(onBack = { nav.popBackStack() })

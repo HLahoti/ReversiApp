@@ -19,12 +19,15 @@ data class SavedMove(val x: Int, val y: Int, val isPass: Boolean = false)
  * legacy EASY/MEDIUM/HARD values. Null for two-player saves and for vs-bot
  * saves written before the picker existed.
  * The move list replays from the standard Reversi opening position.
+ * `historyId` ties a vs-bot save to its game-history entry, so resuming it
+ * carries on the same entry; null for older saves and two-player saves.
  */
 @Serializable
 data class SavedGame(
     val humanColor: String? = null,
     val difficulty: String? = null,
     val moves: List<SavedMove>,
+    val historyId: String? = null,
 )
 
 enum class SavedMode { TWO_PLAYER, VS_BOT }
@@ -62,7 +65,12 @@ class GameStore(private val dir: File) {
         )
     }
 
-    fun writeVsBot(moves: List<SavedMove>, humanColor: Player, opponent: Opponent) {
+    fun writeVsBot(
+        moves: List<SavedMove>,
+        humanColor: Player,
+        opponent: Opponent,
+        historyId: String? = null,
+    ) {
         vsBotFile(opponent).writeText(
             json.encodeToString(
                 SavedGame.serializer(),
@@ -70,10 +78,15 @@ class GameStore(private val dir: File) {
                     humanColor = humanColor.name,
                     difficulty = opponent.name,
                     moves = moves,
+                    historyId = historyId,
                 ),
             )
         )
     }
+
+    /** History ids of the vs-bot games that can still be resumed. */
+    fun resumableHistoryIds(): Set<String> =
+        Opponent.entries.mapNotNullTo(mutableSetOf()) { read(vsBotFile(it))?.historyId }
 
     fun clear(mode: SavedMode, opponent: Opponent? = null) {
         fileFor(mode, opponent).delete()

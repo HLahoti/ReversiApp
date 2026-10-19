@@ -84,6 +84,7 @@ fun HomeScreen(
     onStartTwoPlayer: (resume: Boolean) -> Unit,
     onStartVsBot: (humanColor: HumanColorChoice, opponent: Opponent, resume: Boolean) -> Unit,
     onStartOnline: () -> Unit,
+    onHistory: () -> Unit,
     onHowToPlay: () -> Unit,
     onSettings: () -> Unit,
 ) {
@@ -162,6 +163,7 @@ fun HomeScreen(
                         onPickTwoPlayer = { haptics.tap(); step = SavedMode.TWO_PLAYER },
                         onPickVsBot = { haptics.tap(); step = SavedMode.VS_BOT },
                         onPickOnline = { haptics.confirm(); onStartOnline() },
+                        onHistory = { haptics.tap(); onHistory() },
                         onHowToPlay = { haptics.tap(); onHowToPlay() },
                         onSettings = { haptics.tap(); onSettings() },
                     )
@@ -370,6 +372,7 @@ private fun ModePicker(
     onPickTwoPlayer: () -> Unit,
     onPickVsBot: () -> Unit,
     onPickOnline: () -> Unit,
+    onHistory: () -> Unit,
     onHowToPlay: () -> Unit,
     onSettings: () -> Unit,
 ) {
@@ -392,6 +395,12 @@ private fun ModePicker(
         PrimaryButton(
             text = "Play online",
             onClick = onPickOnline,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(12.dp))
+        SecondaryButton(
+            text = "History",
+            onClick = onHistory,
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(12.dp))
