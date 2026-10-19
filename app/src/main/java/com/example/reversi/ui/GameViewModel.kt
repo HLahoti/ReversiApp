@@ -716,8 +716,15 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private fun appendLog(move: Move, mover: Player, next: GameState) {
         _log.update { it + MoveLogEntry(labelFor(move), mover, next.blackCount, next.whiteCount) }
         _viewingIndex.value = moves.size - 1
+        // A move after this game's entry was completed means the board was
+        // rewound and a new line played: the finished game keeps its result
+        // and replay, and the new line gets an entry of its own.
+        if (historyId?.let(::isCompletedInHistory) == true) historyId = null
         recordHistory()
     }
+
+    private fun isCompletedInHistory(id: String): Boolean =
+        history.entries.value.any { it.id == id && it.status == HistoryStatus.COMPLETED }
 
     /**
      * Write this game as it stands to the game history: called after every
