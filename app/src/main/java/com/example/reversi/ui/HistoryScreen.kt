@@ -269,6 +269,7 @@ private fun HeaderIcon(icon: ImageVector, label: String) {
 private val RowPadding = 12.dp
 private val SeriesInset = 6.dp
 private val SeriesBorder = 1.dp
+private val SeriesCorner = 10.dp
 
 /**
  * The rounds of a series inside an outline, under a row with the score in
@@ -280,7 +281,7 @@ private fun SeriesBlock(
     selfLabel: String,
     replay: (HistoryEntry) -> (() -> Unit)?,
 ) {
-    val shape = RoundedCornerShape(10.dp)
+    val shape = RoundedCornerShape(SeriesCorner)
     val inner = RowPadding - SeriesInset - SeriesBorder
     Column(
         Modifier
@@ -297,58 +298,69 @@ private fun SeriesBlock(
     }
 }
 
-/** "You 3 – 1 Vishy" over "Series · 4 rounds", with who's ahead. */
+/**
+ * You and the opponent in the name columns over "4 rounds", and the score in
+ * rounds where a game's result goes, with who's ahead under it. A stronger
+ * tint than the rounds below sets it apart as their summary.
+ */
 @Composable
 private fun SeriesHeader(s: HistoryItem.Series, selfLabel: String, horizontalPadding: Dp) {
     val ctx = LocalContext.current
     val t = s.tally
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = horizontalPadding, vertical = 10.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                Felt.Highlight.copy(alpha = 0.14f),
+                RoundedCornerShape(topStart = SeriesCorner, topEnd = SeriesCorner),
+            )
+            .padding(horizontal = horizontalPadding, vertical = 10.dp),
     ) {
         Column(Modifier.width(DateColumn)) {
             val (day, time) = formatWhen(ctx, s.latest.lastActivity)
             Text(day, color = Felt.OnDark, fontSize = 13.sp)
             Text(time, color = Felt.OnDarkDim, fontSize = 12.sp)
         }
-        Column(Modifier.weight(2f).padding(end = 6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    selfLabel,
-                    color = Felt.OnDark,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                Text(
-                    "  ${t.wins} – ${t.losses}  ",
-                    color = Felt.Highlight,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                )
-                Text(
-                    opponentLabel(s.latest),
-                    color = Felt.OnDark,
-                    fontSize = 14.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
+        Column(Modifier.weight(2f)) {
+            Row {
+                for ((name, bold) in listOf(selfLabel to true, opponentLabel(s.latest) to false)) {
+                    Text(
+                        name,
+                        color = Felt.OnDark,
+                        fontSize = 14.sp,
+                        fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f).padding(end = 6.dp),
+                    )
+                }
             }
             val drawn = if (t.draws > 0) " · ${t.draws} drawn" else ""
-            Text("Series · ${s.rounds} rounds$drawn", color = Felt.OnDarkDim, fontSize = 11.sp, maxLines = 1)
+            Text(
+                "${s.rounds} rounds$drawn",
+                color = Felt.OnDarkDim,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(end = 6.dp),
+            )
         }
-        Box(Modifier.width(ResultColumn)) {
+        Column(Modifier.width(ResultColumn)) {
             val (label, color) = when {
                 s.latest.status == HistoryStatus.IN_PROGRESS -> "In progress" to Felt.Highlight
                 t.wins > t.losses -> "Won" to Felt.Highlight
                 t.wins < t.losses -> "Lost" to Felt.OnDark
                 else -> "Level" to Felt.OnDark
             }
-            Text(label, color = color, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            Text(
+                "${t.wins} – ${t.losses}",
+                color = Felt.Highlight,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+            )
+            Text(label, color = color, fontSize = 11.sp, maxLines = 1)
         }
         Spacer(Modifier.width(ChevronColumn))
     }
@@ -423,12 +435,14 @@ private fun EntryRow(
 }
 
 /**
- * A player's name with small [marks] after it (a robot for bots; a bulb and
- * an undo arrow for the help you had), which stay put if the name is cut short.
+ * A player's name with small [marks] on the line under it (a robot for bots;
+ * a bulb and an undo arrow for the help you had), so they never crowd the
+ * name. The second line is kept even without marks, so names sit level with
+ * the day and result, and the marks with the time and score.
  */
 @Composable
 private fun SideName(name: String, bold: Boolean, marks: List<Pair<ImageVector, String>>) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Column {
         Text(
             name,
             color = Felt.OnDark,
@@ -436,11 +450,14 @@ private fun SideName(name: String, bold: Boolean, marks: List<Pair<ImageVector, 
             fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false),
         )
-        for ((icon, label) in marks) {
-            Spacer(Modifier.width(4.dp))
-            Icon(icon, contentDescription = label, tint = Felt.OnDarkDim, modifier = Modifier.size(14.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            // An empty line of the time's size, to give this line its height.
+            Text("", fontSize = 12.sp)
+            marks.forEachIndexed { i, (icon, label) ->
+                if (i > 0) Spacer(Modifier.width(4.dp))
+                Icon(icon, contentDescription = label, tint = Felt.OnDarkDim, modifier = Modifier.size(14.dp))
+            }
         }
     }
 }
