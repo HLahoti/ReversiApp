@@ -55,6 +55,12 @@ data class HistoryEntry(
     val hintsUsed: Int = 0,
     /** Times the player rewound and played a different move (vs-bot only). */
     val takebacks: Int = 0,
+    /**
+     * Shared by the rounds of one sitting: games started with "Play again"
+     * (or an online rematch) carry the previous game's id. Null for entries
+     * recorded before series were kept.
+     */
+    val seriesId: String? = null,
 ) {
     val opponentColor: Player get() = myColor.opponent()
 

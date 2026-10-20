@@ -3,6 +3,7 @@ package com.example.reversi.ui
 import android.text.format.DateFormat
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -52,6 +53,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.reversi.R
@@ -59,6 +61,7 @@ import com.example.reversi.game.Player
 import com.example.reversi.history.HelpFilter
 import com.example.reversi.history.HistoryEntry
 import com.example.reversi.history.HistoryFilter
+import com.example.reversi.history.HistoryItem
 import com.example.reversi.history.HistoryMode
 import com.example.reversi.history.HistoryOutcome
 import com.example.reversi.history.HistoryRegistry
@@ -81,6 +84,7 @@ fun HistoryScreen(onBack: () -> Unit, onReplay: (entryId: String) -> Unit) {
     var filter by remember { mutableStateOf(HistoryFilter()) }
     var moreFilters by rememberSaveable { mutableStateOf(false) }
     val shown = remember(all, filter) { all.filter(filter::matches) }
+    val items = remember(shown, all) { HistoryItem.group(shown, all) }
 
     BackdropBackground {
         Column(
@@ -208,16 +212,26 @@ fun HistoryScreen(onBack: () -> Unit, onReplay: (entryId: String) -> Unit) {
                         }
                     } else {
                         LazyColumn {
-                            items(shown, key = { it.id }) { e ->
-                                EntryRow(
-                                    e,
-                                    selfLabel,
-                                    onClick = if (e.moves != null) {
-                                        { haptics.tap(); onReplay(e.id) }
-                                    } else {
-                                        null
-                                    },
-                                )
+                            val replay = { e: HistoryEntry ->
+                                if (e.moves != null) {
+                                    { haptics.tap(); onReplay(e.id) }
+                                } else {
+                                    null
+                                }
+                            }
+                            items(
+                                items,
+                                key = {
+                                    when (it) {
+                                        is HistoryItem.Single -> it.entry.id
+                                        is HistoryItem.Series -> "series:${it.id}"
+                                    }
+                                },
+                            ) { item ->
+                                when (item) {
+                                    is HistoryItem.Single -> EntryRow(item.entry, selfLabel, replay(item.entry))
+                                    is HistoryItem.Series -> SeriesBlock(item, selfLabel, replay)
+                                }
                                 HorizontalDivider(color = Felt.GlassBorder.copy(alpha = 0.4f))
                             }
                         }
@@ -237,7 +251,7 @@ private val ChevronColumn = 18.dp
 private fun HeaderRow() {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = RowPadding, vertical = 10.dp),
     ) {
         Box(Modifier.width(DateColumn)) { HeaderIcon(Icons.Default.CalendarToday, "Date") }
         Box(Modifier.weight(1f)) { Piece(Player.BLACK) }
@@ -252,17 +266,113 @@ private fun HeaderIcon(icon: ImageVector, label: String) {
     Icon(icon, contentDescription = label, tint = Felt.OnDarkDim, modifier = Modifier.size(18.dp))
 }
 
+private val RowPadding = 12.dp
+private val SeriesInset = 6.dp
+private val SeriesBorder = 1.dp
+
+/**
+ * The rounds of a series inside an outline, under a row with the score in
+ * rounds. Rows inside are inset so their columns still line up with the rest.
+ */
+@Composable
+private fun SeriesBlock(
+    s: HistoryItem.Series,
+    selfLabel: String,
+    replay: (HistoryEntry) -> (() -> Unit)?,
+) {
+    val shape = RoundedCornerShape(10.dp)
+    val inner = RowPadding - SeriesInset - SeriesBorder
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = SeriesInset, vertical = 4.dp)
+            .border(SeriesBorder, Felt.Highlight.copy(alpha = 0.45f), shape)
+            .background(Felt.Highlight.copy(alpha = 0.05f), shape),
+    ) {
+        SeriesHeader(s, selfLabel, inner)
+        for (e in s.shown) {
+            HorizontalDivider(color = Felt.GlassBorder.copy(alpha = 0.4f))
+            EntryRow(e, selfLabel, replay(e), horizontalPadding = inner)
+        }
+    }
+}
+
+/** "You 3 – 1 Vishy" over "Series · 4 rounds", with who's ahead. */
+@Composable
+private fun SeriesHeader(s: HistoryItem.Series, selfLabel: String, horizontalPadding: Dp) {
+    val ctx = LocalContext.current
+    val t = s.tally
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = horizontalPadding, vertical = 10.dp),
+    ) {
+        Column(Modifier.width(DateColumn)) {
+            val (day, time) = formatWhen(ctx, s.latest.lastActivity)
+            Text(day, color = Felt.OnDark, fontSize = 13.sp)
+            Text(time, color = Felt.OnDarkDim, fontSize = 12.sp)
+        }
+        Column(Modifier.weight(2f).padding(end = 6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    selfLabel,
+                    color = Felt.OnDark,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                Text(
+                    "  ${t.wins} – ${t.losses}  ",
+                    color = Felt.Highlight,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                )
+                Text(
+                    opponentLabel(s.latest),
+                    color = Felt.OnDark,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
+            val drawn = if (t.draws > 0) " · ${t.draws} drawn" else ""
+            Text("Series · ${s.rounds} rounds$drawn", color = Felt.OnDarkDim, fontSize = 11.sp, maxLines = 1)
+        }
+        Box(Modifier.width(ResultColumn)) {
+            val (label, color) = when {
+                s.latest.status == HistoryStatus.IN_PROGRESS -> "In progress" to Felt.Highlight
+                t.wins > t.losses -> "Won" to Felt.Highlight
+                t.wins < t.losses -> "Lost" to Felt.OnDark
+                else -> "Level" to Felt.OnDark
+            }
+            Text(label, color = color, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        }
+        Spacer(Modifier.width(ChevronColumn))
+    }
+}
+
+private fun opponentLabel(e: HistoryEntry): String =
+    e.opponentName ?: if (e.mode == HistoryMode.ONLINE) "Online player" else "Bot"
+
 /** One game; tappable to replay it when [onClick] is set. */
 @Composable
-private fun EntryRow(e: HistoryEntry, selfLabel: String, onClick: (() -> Unit)?) {
+private fun EntryRow(
+    e: HistoryEntry,
+    selfLabel: String,
+    onClick: (() -> Unit)?,
+    horizontalPadding: Dp = RowPadding,
+) {
     val ctx = LocalContext.current
-    val opponent = e.opponentName ?: if (e.mode == HistoryMode.ONLINE) "Online player" else "Bot"
+    val opponent = opponentLabel(e)
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = horizontalPadding, vertical = 10.dp),
     ) {
         Column(Modifier.width(DateColumn)) {
             val (day, time) = formatWhen(ctx, e.lastActivity)

@@ -161,6 +161,13 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private var historyId: String? = null
 
     /**
+     * The sitting this game belongs to, stamped on its history entry. A new
+     * one for each fresh game; kept across "Play again" and online rematches
+     * so those rounds are grouped in the history.
+     */
+    private var seriesId: String = UUID.randomUUID().toString()
+
+    /**
      * Showing a finished game from the history: [moves] holds the whole game
      * and the board steps through it, but nothing can be played, saved or
      * recorded.
@@ -193,6 +200,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     fun configure(players: Players, opponent: Opponent? = null) {
         abandonHistory()
+        seriesId = UUID.randomUUID().toString()
         _players.value = players
         mode = modeFor(players)
         setOpponent(opponent)
@@ -220,9 +228,11 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         setOpponent(opponent ?: Opponent.fromSaved(saved.difficulty))
         resetInternal()
         historyId = saved.historyId
+        seriesId = UUID.randomUUID().toString()
         history.entries.value.find { it.id == historyId }?.let {
             hintsUsed = it.hintsUsed
             takebacks = it.takebacks
+            it.seriesId?.let { id -> seriesId = id }
         }
         _state.value = loadMoves(saved.moves.map { if (it.isPass) Move.PASS else Move(it.x, it.y) })
         _viewingIndex.value = moves.size - 1
@@ -337,6 +347,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         rematchPending = false
         desyncError = null
         historyId = null
+        seriesId = UUID.randomUUID().toString()
         _players.value = Players(
             black = if (localColor == Player.BLACK) Participant.HUMAN else Participant.REMOTE,
             white = if (localColor == Player.WHITE) Participant.HUMAN else Participant.REMOTE,
@@ -606,6 +617,12 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             requestRematch()
             return
         }
+        seriesId = UUID.randomUUID().toString()
+        restartLocal()
+    }
+
+    /** Start a fresh local game in place of this one, in the same series. */
+    private fun restartLocal() {
         botJob?.cancel()
         abandonHistory()
         resetInternal()
@@ -625,7 +642,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         _players.update { Players(black = it.white, white = it.black) }
-        resetGame()
+        restartLocal()
     }
 
     /**
@@ -802,6 +819,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 moves = if (outcome == null) null else HistoryMoves.encode(moves),
                 hintsUsed = hintsUsed,
                 takebacks = takebacks,
+                seriesId = seriesId,
             ),
         )
     }
