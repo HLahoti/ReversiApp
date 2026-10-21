@@ -8,6 +8,8 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -20,6 +22,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -43,6 +47,7 @@ import com.example.reversi.config.AppConfig
 import com.example.reversi.game.Cell
 import com.example.reversi.game.GameState
 import com.example.reversi.game.Move
+import com.example.reversi.game.Player
 import kotlinx.coroutines.delay
 
 @Composable
@@ -55,6 +60,11 @@ fun BoardView(
     modifier: Modifier = Modifier,
     /** The bot's suggested move, drawn as a pulsing hint dot. */
     hint: Move? = null,
+    /** A review's grade for the move just played, drawn on its disc. */
+    badge: MoveBadge? = null,
+    /** A move to show as a faint disc of [ghostColor]: the better move a review found. */
+    ghost: Move? = null,
+    ghostColor: Player = Player.BLACK,
 ) {
     val cfg = AppConfig.Board
     val notation = AppConfig.Notation
@@ -88,6 +98,9 @@ fun BoardView(
                     flips = flips,
                     showHints = showHints,
                     hint = hint,
+                    badge = badge,
+                    ghost = ghost,
+                    ghostColor = ghostColor,
                     openingFrame = openingFrame,
                     onTap = onTap,
                     boardDp = boardDp,
@@ -106,6 +119,9 @@ private fun Board(
     flips: FlipAnimations,
     showHints: Boolean,
     hint: Move?,
+    badge: MoveBadge?,
+    ghost: Move?,
+    ghostColor: Player,
     openingFrame: Int?,
     onTap: (Int, Int) -> Unit,
     boardDp: Dp,
@@ -202,6 +218,47 @@ private fun Board(
                             (cellPx * cfg.LAST_MOVE_RING_DIAMETER_RATIO).toDp()
                         })
                     }
+                }
+            }
+
+            ghost?.takeIf { !it.isPass && state.board.at(it.x, it.y) == Cell.EMPTY }?.let { g ->
+                val xDp = with(density) { (g.x * cellPx).toDp() }
+                val yDp = with(density) { (g.y * cellPx).toDp() }
+                Box(
+                    Modifier.size(cellDp).offset(x = xDp, y = yDp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Image(
+                        painter = painterResource(
+                            if (ghostColor == Player.BLACK) R.drawable.piece_black else R.drawable.piece_white,
+                        ),
+                        contentDescription = "Best move",
+                        alpha = cfg.GHOST_ALPHA,
+                        modifier = Modifier.size(pieceDp),
+                    )
+                }
+            }
+
+            // Drawn last so it sits over the neighbouring square's disc.
+            badge?.takeIf { it.move == state.lastMove }?.let { b ->
+                val xDp = with(density) { (b.move.x * cellPx).toDp() }
+                val yDp = with(density) { (b.move.y * cellPx).toDp() }
+                val badgeDp = cellDp * cfg.BADGE_TO_CELL_RATIO
+                Box(
+                    Modifier
+                        .offset(x = xDp + cellDp - badgeDp * 0.75f, y = yDp - badgeDp * 0.25f)
+                        .size(badgeDp)
+                        .background(b.grade.color, CircleShape)
+                        .border(1.dp, Color.White.copy(alpha = 0.85f), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        b.grade.suffix,
+                        color = Color.White,
+                        fontSize = with(density) { (badgeDp * 0.5f).toSp() },
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                    )
                 }
             }
     }

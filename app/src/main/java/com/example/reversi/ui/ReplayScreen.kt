@@ -25,14 +25,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.reversi.analysis.EndgameReview
+import com.example.reversi.analysis.EndgameReviews
+import com.example.reversi.analysis.MoveVerdict
 import com.example.reversi.game.Player
 import com.example.reversi.history.HistoryEntry
 import com.example.reversi.history.HistoryMode
@@ -52,6 +57,11 @@ fun ReplayScreen(entryId: String, onBack: () -> Unit) {
     val record = remember(entry) { entry?.moves?.let(HistoryMoves::decode) }
     val vm: GameViewModel = viewModel()
     LaunchedEffect(record) { record?.let(vm::configureReplay) }
+    val review by produceState<EndgameReview?>(null, record) {
+        value = record?.let { EndgameReviews.of(it) }
+    }
+    val selfLabel = ProfileRegistry.current.selfLabel
+    val nameOf = { p: Player -> if (p == entry?.myColor) selfLabel else entry?.let(::opponentLabel) ?: "Bot" }
 
     val state by vm.state.collectAsState()
     val flips by vm.flips.collectAsState()
@@ -60,6 +70,7 @@ fun ReplayScreen(entryId: String, onBack: () -> Unit) {
     val animating by vm.animating.collectAsState()
     val playing by vm.replayPlaying.collectAsState()
     val last = log.size - 1
+    val verdict = review?.verdicts?.get(viewingIndex)?.takeIf { it.grade != null }
 
     BackdropBackground {
         Column(
@@ -95,6 +106,9 @@ fun ReplayScreen(entryId: String, onBack: () -> Unit) {
                 hint = null,
                 openingFrame = null,
                 onTap = { _, _ -> },
+                badge = verdict?.let { MoveBadge(it.move, it.grade!!) },
+                ghost = verdict?.bestMove,
+                ghostColor = verdict?.mover ?: Player.BLACK,
             )
 
             Spacer(Modifier.height(8.dp))
@@ -130,7 +144,7 @@ fun ReplayScreen(entryId: String, onBack: () -> Unit) {
             GlassPanel(Modifier.fillMaxWidth()) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        replayResult(entry, ProfileRegistry.current.selfLabel),
+                        replayResult(entry, selfLabel),
                         color = Felt.OnDark,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Medium,
@@ -141,6 +155,7 @@ fun ReplayScreen(entryId: String, onBack: () -> Unit) {
                         color = Felt.OnDarkDim,
                         fontSize = 14.sp,
                     )
+                    ReviewNote(review, verdict, nameOf)
                 }
             }
 
@@ -150,9 +165,41 @@ fun ReplayScreen(entryId: String, onBack: () -> Unit) {
                 currentIndex = viewingIndex,
                 onJump = { idx -> haptics.tap(); vm.replayTo(idx) },
                 modifier = Modifier.fillMaxWidth(),
+                marks = remember(review) {
+                    review?.verdicts?.mapNotNull { (ply, v) -> v.grade?.let { ply to it } }?.toMap().orEmpty()
+                },
             )
             Spacer(Modifier.height(8.dp))
         }
+    }
+}
+
+/**
+ * Under the move count: the grade and the better move when the move shown
+ * was marked, otherwise how the endgame went for each side.
+ */
+@Composable
+private fun ReviewNote(review: EndgameReview?, verdict: MoveVerdict?, nameOf: (Player) -> String) {
+    if (review == null) {
+        Spacer(Modifier.height(6.dp))
+        Text("Checking the endgame…", color = Felt.OnDarkDim, fontSize = 13.sp)
+        return
+    }
+    if (verdict != null) {
+        val grade = verdict.grade!!
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "${nameOf(verdict.mover)}: ${squareName(verdict.move)}${grade.suffix} ${grade.label}",
+            color = grade.color,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium,
+        )
+        Text(verdictDetail(verdict), color = Felt.OnDarkDim, fontSize = 13.sp, textAlign = TextAlign.Center)
+        return
+    }
+    reviewSummary(review, nameOf)?.let {
+        Spacer(Modifier.height(6.dp))
+        Text(it, color = Felt.OnDarkDim, fontSize = 13.sp, textAlign = TextAlign.Center)
     }
 }
 

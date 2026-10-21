@@ -128,6 +128,32 @@ object AppConfig {
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // Endgame review of a replayed game (com.example.reversi.analysis)
+    // ─────────────────────────────────────────────────────────────────────
+    object Analysis {
+        /**
+         * Moves played with this many squares empty or fewer are solved
+         * exactly and graded. Each extra empty roughly doubles to triples
+         * the solving time.
+         */
+        const val MAX_EMPTIES: Int = 14
+
+        /**
+         * How much a final margin of `d` discs is worth: `tanh(d / this)`,
+         * from -1 (a crushing loss) to 1. Moves are graded by how much of
+         * that they give away, so a few discs matter in a close game and
+         * hardly at all once it's decided.
+         */
+        const val STAKE_SCALE_DISCS: Float = 16f
+
+        /** Worth given away, against the best move, that makes a mistake. */
+        const val MISTAKE_STAKE: Float = 0.25f
+
+        /** Worth given away, against the best move, that makes a blunder. */
+        const val BLUNDER_STAKE: Float = 0.7f
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // Game-start intro animation
     // ─────────────────────────────────────────────────────────────────────
     object OpeningAnimation {
@@ -172,6 +198,12 @@ object AppConfig {
 
         /** Last-move ring opacity (0–1). */
         const val LAST_MOVE_RING_ALPHA: Float = 0.85f
+
+        /** Endgame-review badge ("?" / "??") diameter as a fraction of a cell. */
+        const val BADGE_TO_CELL_RATIO: Float = 0.45f
+
+        /** Opacity of the faint disc marking the better move in a review. */
+        const val GHOST_ALPHA: Float = 0.6f
 
         /** Toggle hint dots globally. */
         const val SHOW_LEGAL_HINTS: Boolean = true
@@ -266,5 +298,9 @@ object AppConfig {
         // Score-badge disc colours.
         val BlackBadge  = Color(0xFF101010)
         val WhiteBadge  = Color(0xFFE8E8E8)
+
+        // Endgame-review badges.
+        val Mistake     = Color(0xFFF0A040)
+        val Blunder     = Color(0xFFE5534B)
     }
 }

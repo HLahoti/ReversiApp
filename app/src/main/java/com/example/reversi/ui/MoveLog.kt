@@ -9,11 +9,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.reversi.analysis.Grade
 import com.example.reversi.config.AppConfig
 import com.example.reversi.game.Player
 
@@ -41,6 +44,8 @@ fun MoveLog(
     currentIndex: Int,
     onJump: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    /** Grades from an endgame review, by index into [entries]. */
+    marks: Map<Int, Grade> = emptyMap(),
 ) {
     val listState = rememberLazyListState()
     LaunchedEffect(entries.size, currentIndex) {
@@ -61,6 +66,7 @@ fun MoveLog(
         itemsIndexed(entries) { index, e ->
             MoveColumn(
                 entry = e,
+                grade = marks[index],
                 isCurrent = index == currentIndex,
                 onClick = { onJump(index) },
             )
@@ -69,7 +75,7 @@ fun MoveLog(
 }
 
 @Composable
-private fun MoveColumn(entry: MoveLogEntry, isCurrent: Boolean, onClick: () -> Unit) {
+private fun MoveColumn(entry: MoveLogEntry, grade: Grade?, isCurrent: Boolean, onClick: () -> Unit) {
     val moverBg = if (entry.mover == Player.BLACK) AppConfig.Palette.BlackBadge else AppConfig.Palette.WhiteBadge
     val moverFg = if (entry.mover == Player.BLACK) Color.White else Color.Black
     val outline = if (isCurrent) {
@@ -87,7 +93,18 @@ private fun MoveColumn(entry: MoveLogEntry, isCurrent: Boolean, onClick: () -> U
             .padding(COLUMN_PAD),
         verticalArrangement = Arrangement.spacedBy(CELL_GAP),
     ) {
-        LogCell(entry.label, moverBg, moverFg)
+        Box {
+            LogCell(entry.label + (grade?.suffix ?: ""), moverBg, moverFg)
+            if (grade != null) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = 2.dp, y = (-2).dp)
+                        .size(7.dp)
+                        .background(grade.color, CircleShape),
+                )
+            }
+        }
         LogCell(entry.black.toString(), AppConfig.Palette.BlackBadge, Color.White)
         LogCell(entry.white.toString(), AppConfig.Palette.WhiteBadge, Color.Black)
     }
