@@ -1,6 +1,11 @@
 package com.example.reversi.ui
 
+import android.Manifest
 import android.app.Activity
+import android.os.Build
+import androidx.activity.compose.LocalActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +33,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -39,12 +45,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.example.reversi.BuildConfig
 import com.example.reversi.R
 import com.example.reversi.config.AppConfig
@@ -149,20 +158,59 @@ private fun GameplaySection() {
 @Composable
 private fun OnlineSection() {
     val haptics = rememberHaptics()
+    val context = LocalContext.current
+    val activity = LocalActivity.current
     val awayAlerts by UserSettings.awayAlerts.collectAsState()
-    val requestNotifications = rememberNotificationPermissionRequest()
+
+    // Whether Android allows the notifications at all. Re-checked on every
+    // return, since the player can change it in system settings.
+    var allowed by remember { mutableStateOf(notificationsAllowed(context)) }
+    // Sent to system settings to allow them; turn the setting on if they did.
+    var awaitingSystemSettings by remember { mutableStateOf(false) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val obs = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                allowed = notificationsAllowed(context)
+                if (awaitingSystemSettings) {
+                    awaitingSystemSettings = false
+                    if (allowed) UserSettings.setAwayAlerts(true)
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
+    val askPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        allowed = granted
+        if (granted) UserSettings.setAwayAlerts(true)
+    }
 
     SectionTitle("Online play")
     GlassPanel(Modifier.fillMaxWidth()) {
         SettingRow(
-            title = "Notify me while I'm away",
+            title = "Notifications",
             description = "If you switch apps during an online game, get a notification when " +
                 "your opponent joins, plays, asks for a rematch, or the game ends.",
-            checked = awayAlerts,
-            onCheckedChange = {
+            checked = awayAlerts && allowed,
+            onCheckedChange = { on ->
                 haptics.tap()
-                UserSettings.setAwayAlerts(it)
-                if (it) requestNotifications()
+                val permission = Manifest.permission.POST_NOTIFICATIONS
+                when {
+                    !on -> UserSettings.setAwayAlerts(false)
+                    allowed -> UserSettings.setAwayAlerts(true)
+                    // Android still shows its prompt after a first refusal.
+                    Build.VERSION.SDK_INT >= 33 &&
+                        activity?.shouldShowRequestPermissionRationale(permission) == true ->
+                        askPermission.launch(permission)
+                    // Refused twice, or blocked in system settings: only there can they be allowed.
+                    else -> {
+                        awaitingSystemSettings = true
+                        context.startActivity(appNotificationSettings(context))
+                    }
+                }
             },
         )
     }

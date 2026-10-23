@@ -60,7 +60,6 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.reversi.data.UserSettings
 import com.example.reversi.game.Player
 import com.example.reversi.profile.DisplayNames
 import com.example.reversi.profile.PlayerProfile
@@ -75,10 +74,6 @@ fun OnlineLobbyScreen(
 ) {
     val state by vm.state.collectAsState()
     val haptics = rememberHaptics()
-    val awayAlerts by UserSettings.awayAlerts.collectAsState()
-    val requestNotifications = rememberNotificationPermissionRequest()
-    // Opening a room is when the alerts start to matter, so ask then.
-    val askForAlerts = { if (awayAlerts) requestNotifications() }
 
     LaunchedEffect(state.handoffToken) {
         val tok = state.handoffToken ?: return@LaunchedEffect
@@ -134,8 +129,8 @@ fun OnlineLobbyScreen(
                     nameFocus = nameFocus,
                     initialCode = state.roomCode?.value ?: "",
                     error = state.error,
-                    onCreate = { color -> haptics.confirm(); askForAlerts(); vm.createRoom(color) },
-                    onJoin = { code -> haptics.confirm(); askForAlerts(); vm.joinRoom(code) },
+                    onCreate = { color -> haptics.confirm(); vm.createRoom(color) },
+                    onJoin = { code -> haptics.confirm(); vm.joinRoom(code) },
                 )
                 LobbyStep.CREATING -> StatusPanel("Creating room…")
                 LobbyStep.JOINING -> StatusPanel("Joining room…")

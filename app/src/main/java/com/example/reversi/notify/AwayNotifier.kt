@@ -123,14 +123,6 @@ object AwayNotifier {
         }
     }
 
-    /** Notification permission was just granted: start the service if a room is open. */
-    @Synchronized
-    fun onPermissionGranted() {
-        val s = session ?: return
-        _ongoing.value = ongoingFor(last ?: s.state.value)
-        startService()
-    }
-
     @Synchronized
     private fun unwatch(session: OnlineSession?) {
         if (session == null || session !== this.session) return

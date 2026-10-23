@@ -1,10 +1,13 @@
 package com.example.reversi
 
+import android.Manifest
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
@@ -43,6 +46,7 @@ import com.example.reversi.ui.HumanColorChoice
 import com.example.reversi.ui.OnlineLobbyScreen
 import com.example.reversi.ui.ReversiTheme
 import com.example.reversi.ui.SettingsScreen
+import com.example.reversi.ui.notificationsAllowed
 import com.example.reversi.ui.HistoryScreen
 import com.example.reversi.ui.ReplayScreen
 import com.example.reversi.update.GitHubReleaseChecker
@@ -53,6 +57,11 @@ import kotlin.random.Random
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    private val askNotifications =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            UserSettings.setAwayAlerts(granted)
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Who the player is online: a name typed into the lobby for now.
@@ -95,6 +104,15 @@ class MainActivity : ComponentActivity() {
         // Notifications for an online game the player has switched away from.
         AwayNotifier.install(this)
         lifecycle.addObserver(AwayNotifier.visibility)
+        // First launch after install: ask for them, and start the setting at
+        // the answer. Android 12 and below need no permission, so it's on.
+        if (savedInstanceState == null && !UserSettings.awayAlertsChosen()) {
+            if (Build.VERSION.SDK_INT >= 33 && !notificationsAllowed(this)) {
+                askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                UserSettings.setAwayAlerts(notificationsAllowed(this))
+            }
+        }
 
         enableEdgeToEdge()
         setContent {

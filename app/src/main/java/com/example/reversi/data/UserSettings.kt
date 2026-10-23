@@ -31,10 +31,12 @@ object UserSettings {
     /** True when a new game opens with the game-start intro. On by default. */
     val openingAnimation: StateFlow<Boolean> = _openingAnimation.asStateFlow()
 
-    private val _awayAlerts = MutableStateFlow(true)
+    private val _awayAlerts = MutableStateFlow(false)
     /**
      * True when an online game sends notifications while the player is in
-     * another app; see [com.example.reversi.notify.AwayNotifier]. On by default.
+     * another app; see [com.example.reversi.notify.AwayNotifier]. Starts as
+     * the player's answer to the permission prompt on first launch, so it's
+     * off if they refused.
      */
     val awayAlerts: StateFlow<Boolean> = _awayAlerts.asStateFlow()
 
@@ -44,8 +46,11 @@ object UserSettings {
         _hintsOff.value = prefs.getBoolean(K_HINTS_OFF, false)
         _openingAnimation.value = prefs.getBoolean(K_OPENING_ANIMATION, true)
         _takebacksOff.value = prefs.getBoolean(K_TAKEBACKS_OFF, false)
-        _awayAlerts.value = prefs.getBoolean(K_AWAY_ALERTS, true)
+        _awayAlerts.value = prefs.getBoolean(K_AWAY_ALERTS, false)
     }
+
+    /** False until the first launch has asked for notifications and set [awayAlerts]. */
+    fun awayAlertsChosen(): Boolean = prefs.contains(K_AWAY_ALERTS)
 
     fun setHintsOff(off: Boolean) {
         _hintsOff.value = off
