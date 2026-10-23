@@ -198,7 +198,10 @@ object AppConfig {
     // Online play
     // ─────────────────────────────────────────────────────────────────────
     object Online {
-        /** Download page linked from the shared room-code message, for friends without the app. */
+        /**
+         * Download page linked from the shared room-code message, for friends
+         * without the app, and opened by the Update button when a new version is out.
+         */
         const val DOWNLOAD_URL: String = "https://hlahoti.github.io/ReversiApp/"
     }
 

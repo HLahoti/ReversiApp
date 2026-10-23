@@ -40,7 +40,6 @@ class GitHubReleaseCheckerTest {
             AvailableUpdate(
                 versionName = "1.6",
                 title = "Resign and hints",
-                url = "https://github.com/HLahoti/ReversiApp/releases/tag/v1.6",
             ),
             update,
         )

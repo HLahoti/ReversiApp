@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import com.example.reversi.config.AppConfig
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
@@ -14,7 +15,9 @@ import kotlinx.serialization.json.Json
 
 /**
  * [UpdateChecker] for the sideloaded app: compares the latest GitHub release
- * with the installed version, and opens the release page to update.
+ * with the installed version, and opens the download page to update. Players
+ * are sent to the download page rather than the release page so they never
+ * land on the GitHub repo.
  *
  * Only needed while the app is not on the Play Store; see [UpdateChecker].
  *
@@ -29,6 +32,7 @@ import kotlinx.serialization.json.Json
 class GitHubReleaseChecker(
     private val installedVersion: String,
     private val repo: String = REPO,
+    private val downloadPage: String = AppConfig.Online.DOWNLOAD_URL,
 ) : UpdateChecker {
 
     override suspend fun latest(): AvailableUpdate? = withContext(Dispatchers.IO) {
@@ -48,9 +52,8 @@ class GitHubReleaseChecker(
     }
 
     override fun startUpdate(activity: Activity, update: AvailableUpdate) {
-        val url = update.url ?: "https://github.com/$repo/releases/latest"
         try {
-            activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(downloadPage)))
         } catch (_: ActivityNotFoundException) {
             // No browser; nothing more we can do.
         }
@@ -60,7 +63,6 @@ class GitHubReleaseChecker(
     private data class Release(
         @SerialName("tag_name") val tagName: String,
         val name: String? = null,
-        @SerialName("html_url") val htmlUrl: String? = null,
     )
 
     companion object {
@@ -76,7 +78,6 @@ class GitHubReleaseChecker(
             return AvailableUpdate(
                 versionName = version,
                 title = release.name?.takeIf { it.isNotBlank() },
-                url = release.htmlUrl,
             )
         }
 
