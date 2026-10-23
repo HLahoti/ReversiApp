@@ -13,6 +13,17 @@ object Changelog {
 
     val entries: List<Entry> = listOf(
         Entry(
+            version = "1.8",
+            title = "Online game notifications",
+            changes = listOf(
+                "Switch apps during an online game and get a notification when your opponent joins, plays, asks for a rematch, or the game ends. Tap it to go straight back to the game.",
+                "Turn the notifications on or off under Online play in Settings.",
+                "History groups the rounds you play with Play again into one series, with the score in rounds won.",
+                "Names in History stay whole on narrow screens.",
+                "Update now opens the download page.",
+            ),
+        ),
+        Entry(
             version = "1.7",
             title = "Game history, replays and online names",
             changes = listOf(
