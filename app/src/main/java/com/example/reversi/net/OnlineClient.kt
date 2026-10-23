@@ -62,8 +62,12 @@ interface OnlineClient {
 object OnlineRegistry {
     @Volatile private var instance: OnlineClient? = null
 
-    fun install(client: OnlineClient) {
+    /** Returns true for the first install in this process, false on an activity re-creation. */
+    @Synchronized
+    fun install(client: OnlineClient): Boolean {
+        val first = instance == null
         instance = client
+        return first
     }
 
     val current: OnlineClient

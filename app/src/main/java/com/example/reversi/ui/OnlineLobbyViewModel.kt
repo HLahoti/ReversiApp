@@ -13,6 +13,7 @@ import com.example.reversi.net.RoomCode
 import com.example.reversi.net.RoomCodes
 import com.example.reversi.net.SessionHandoff
 import com.example.reversi.net.SessionStatus
+import com.example.reversi.notify.AwayNotifier
 import com.example.reversi.profile.PlayerProfile
 import com.example.reversi.profile.ProfileRegistry
 import kotlinx.coroutines.Job
@@ -63,7 +64,7 @@ class OnlineLobbyViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(step = LobbyStep.CREATING, error = null) }
         viewModelScope.launch {
             try {
-                val s = client.createRoom(hostColor)
+                val s = AwayNotifier.watch(client.createRoom(hostColor))
                 session = s
                 _state.update { it.copy(step = LobbyStep.WAITING, roomCode = s.roomCode) }
                 watchForActive(s)
@@ -86,7 +87,7 @@ class OnlineLobbyViewModel(app: Application) : AndroidViewModel(app) {
         }
         viewModelScope.launch {
             try {
-                val s = client.joinRoom(code, allowSameName)
+                val s = AwayNotifier.watch(client.joinRoom(code, allowSameName))
                 session = s
                 watchForActive(s)
             } catch (e: OnlineError.SameName) {

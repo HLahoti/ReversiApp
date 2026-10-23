@@ -28,6 +28,7 @@ import com.example.reversi.data.SavedMode
 import com.example.reversi.data.UserSettings
 import com.example.reversi.game.Player
 import com.example.reversi.net.OnlineRegistry
+import com.example.reversi.notify.AwayNotifier
 import com.example.reversi.net.SessionHandoff
 import com.example.reversi.net.firebase.FirebaseOnlineClient
 import com.example.reversi.history.HistoryRegistry
@@ -62,7 +63,7 @@ class MainActivity : ComponentActivity() {
         // Register the online backend. Swap this one line (and the import
         // above) when moving off Firebase to a custom WebSocket server.
         val onlineClient = FirebaseOnlineClient(applicationContext, profile)
-        OnlineRegistry.install(onlineClient)
+        val firstLaunch = OnlineRegistry.install(onlineClient)
 
         // Game history, kept on the device. Once per process: an activity
         // recreated mid-game must not abandon the game it is showing. Games
@@ -74,8 +75,10 @@ class MainActivity : ComponentActivity() {
 
         // Best-effort sweep of any rooms this device still has in its local
         // tracker from a previous session (host or guest). Each is deleted if
-        // still around, dropped if the other player already cleaned up.
-        lifecycleScope.launch { runCatching { onlineClient.sweepTrackedRooms() } }
+        // still around, dropped if the other player already cleaned up. Once
+        // per process: an activity re-created mid-game (or opened from a
+        // notification) must not delete the room that game is still using.
+        if (firstLaunch) lifecycleScope.launch { runCatching { onlineClient.sweepTrackedRooms() } }
 
         // Update checks, while the app is sideloaded from GitHub Releases.
         // Moving to the Play Store: swap GitHubReleaseChecker for a Play
@@ -88,6 +91,10 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch { Updates.checkIfDue() }
 
         UserSettings.install(this)
+
+        // Notifications for an online game the player has switched away from.
+        AwayNotifier.install(this)
+        lifecycle.addObserver(AwayNotifier.visibility)
 
         enableEdgeToEdge()
         setContent {

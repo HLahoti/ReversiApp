@@ -92,6 +92,8 @@ fun SettingsScreen(onBack: () -> Unit) {
             ) {
                 GameplaySection()
                 Spacer(Modifier.height(24.dp))
+                OnlineSection()
+                Spacer(Modifier.height(24.dp))
                 AboutSection()
             }
         }
@@ -141,6 +143,28 @@ private fun GameplaySection() {
                 onCheckedChange = { haptics.tap(); UserSettings.setOpeningAnimation(it) },
             )
         }
+    }
+}
+
+@Composable
+private fun OnlineSection() {
+    val haptics = rememberHaptics()
+    val awayAlerts by UserSettings.awayAlerts.collectAsState()
+    val requestNotifications = rememberNotificationPermissionRequest()
+
+    SectionTitle("Online play")
+    GlassPanel(Modifier.fillMaxWidth()) {
+        SettingRow(
+            title = "Notify me while I'm away",
+            description = "If you switch apps during an online game, get a notification when " +
+                "your opponent joins, plays, asks for a rematch, or the game ends.",
+            checked = awayAlerts,
+            onCheckedChange = {
+                haptics.tap()
+                UserSettings.setAwayAlerts(it)
+                if (it) requestNotifications()
+            },
+        )
     }
 }
 
