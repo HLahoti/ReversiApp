@@ -81,6 +81,8 @@ import com.example.reversi.R
 import com.example.reversi.bot.Opponent
 import com.example.reversi.config.AppConfig
 import com.example.reversi.data.GameStore
+import com.example.reversi.history.HistoryRegistry
+import com.example.reversi.history.HistoryTally
 import com.example.reversi.data.SavedMode
 import kotlinx.coroutines.delay
 
@@ -98,6 +100,7 @@ fun HomeScreen(
     val store = remember(ctx) { GameStore(ctx.applicationContext) }
     var choice by remember { mutableStateOf(HumanColorChoice.RANDOM) }
     var opponent by remember { mutableStateOf(Opponent.DEFAULT) }
+    val history by HistoryRegistry.current.entries.collectAsState()
 
     // Re-check save existence whenever this screen comes to the foreground
     // (back from a game, app resume) so Resume/New buttons stay in sync.
@@ -244,6 +247,14 @@ fun HomeScreen(
                             lineHeight = 16.sp,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(horizontal = 8.dp),
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            HistoryTally.vsBot(history, opponent.name).recordLine(opponent.displayName),
+                            color = Felt.OnDark.copy(alpha = 0.85f),
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth(),
                         )
                         Spacer(Modifier.height(14.dp))
                         if (hasVsBot) {

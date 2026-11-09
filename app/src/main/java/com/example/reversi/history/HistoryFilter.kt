@@ -42,5 +42,30 @@ data class HistoryTally(val wins: Int, val losses: Int, val draws: Int) {
             losses = entries.count { it.outcome == HistoryOutcome.LOSS },
             draws = entries.count { it.outcome == HistoryOutcome.DRAW },
         )
+
+        /** The player's finished games against the bot whose enum name is [botId]. */
+        fun vsBot(entries: List<HistoryEntry>, botId: String) = of(
+            entries.filter {
+                it.mode == HistoryMode.BOT && it.botId == botId && it.status == HistoryStatus.COMPLETED
+            },
+        )
     }
+
+    val games: Int get() = wins + losses + draws
+
+    /**
+     * One line for the bot picker, e.g. "Your record vs Arjun: 3 wins · 1 loss".
+     * Draws are left out until there is one, since most players never have any.
+     */
+    fun recordLine(botName: String): String {
+        if (games == 0) return "You haven't finished a game against $botName yet"
+        val parts = buildList {
+            add(plural(wins, "win", "wins"))
+            add(plural(losses, "loss", "losses"))
+            if (draws > 0) add(plural(draws, "draw", "draws"))
+        }
+        return "Your record vs $botName: ${parts.joinToString(" · ")}"
+    }
+
+    private fun plural(n: Int, one: String, many: String) = "$n ${if (n == 1) one else many}"
 }
